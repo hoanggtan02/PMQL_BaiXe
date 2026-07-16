@@ -26,7 +26,7 @@ Yêu cầu Python >= 3.12.
 ```bash
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,gui]"   # bỏ ,gui nếu chỉ chạy CLI/test
 cp .env.example .env              # chỉnh các giá trị cho phù hợp
 ```
 
@@ -71,6 +71,17 @@ python -m pmql.main register-subscriber --full-name "Le Van A" --phone 090000000
 
 # Xác nhận một alert hệ thống
 python -m pmql.main ack-alert --alert-id <alert_id> --user-id an.nguyen
+
+# CRUD quản trị (dùng UUID in ra từ lệnh list)
+python -m pmql.main list-users
+python -m pmql.main reset-password --username admin --password 123
+python -m pmql.main list-subscribers
+python -m pmql.main update-subscriber --subscriber-id <id> --full-name "Le Van A" --phone 0900000000 --vehicle-type motorbike --valid-from 2026-01-01 --valid-until 2026-12-31
+python -m pmql.main delete-subscriber --subscriber-id <id>
+python -m pmql.main list-fee-rules
+python -m pmql.main create-fee-rule --name "Xe tải" --vehicle-type truck --price-per-block 30000
+python -m pmql.main update-fee-rule --rule-id <id> --name "Xe tải mới" --vehicle-type truck --price-per-block 35000
+python -m pmql.main delete-fee-rule --rule-id <id>
 ```
 
 File DB nằm ở `./data/parking_local.db` (xem `LOCAL_DATABASE_URL` trong `.env`).
@@ -142,6 +153,16 @@ trong cùng một đợt nhỏ:
 - Xử lý múi giờ: toàn bộ timestamp hiện là timezone-naive UTC
   (`datetime.utcnow()`), phù hợp cho MVP nhưng nên chuyển sang
   timezone-aware trước khi lên production.
+
+### CRUD quản trị đã bổ sung
+
+- Tài khoản: liệt kê, cập nhật tên/role/trạng thái, đổi mật khẩu và xoá.
+- Thuê bao: liệt kê, sửa thông tin/gia hạn/kích hoạt, xoá; tạo mới vẫn dùng
+  `register-subscriber` để có thể phát hành RFID trong cùng transaction.
+- Biểu phí: liệt kê, thêm, sửa và xoá; các giá trị tiền/phút không hợp lệ bị
+  từ chối ở application layer.
+- `init-db` seed tài khoản phát triển `admin / 123` nếu database chưa có user
+  `admin`. Với database đã tạo, chạy `reset-password --username admin --password 123`.
 
 > Lưu ý môi trường xây dựng đợt này: các file đã được kiểm tra cú pháp bằng
 > `python -m py_compile` cho toàn bộ `src/` và `tests/`, nhưng bản build lại

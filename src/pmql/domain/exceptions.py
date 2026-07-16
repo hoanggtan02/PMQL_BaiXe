@@ -78,5 +78,13 @@ class InvalidRoleError(DomainError):
     """The supplied role is not one of the supported system roles."""
 
 
+class UserNotFoundError(DomainError):
+    """User account does not exist."""
+
+
+class InvalidFeeRuleError(DomainError):
+    """Fee rule values are invalid."""
+
+
 class AlertNotFoundError(DomainError):
     """Alert does not exist or is not currently unacknowledged."""

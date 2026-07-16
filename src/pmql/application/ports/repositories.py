@@ -179,6 +179,9 @@ class IUserRepository(ABC):
     async def update(self, user: User) -> None: ...
 
     @abstractmethod
+    async def delete(self, user_id: str) -> None: ...
+
+    @abstractmethod
     async def list_all(self) -> list[User]: ...
 
 

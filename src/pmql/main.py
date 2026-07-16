@@ -40,6 +40,10 @@ from pmql.application.use_cases.alert_ops.acknowledge_alert_use_case import (
 )
 from pmql.application.use_cases.auth.create_user_use_case import CreateUserInput, CreateUserUseCase
 from pmql.application.use_cases.auth.login_use_case import LoginInput, LoginUseCase
+from pmql.application.use_cases.management_ops import (
+    FeeRuleInput, FeeRuleManagementUseCase, SubscriberManagementUseCase,
+    SubscriberUpdateInput, UserManagementUseCase, UserUpdateInput,
+)
 from pmql.application.use_cases.lane_ops.vehicle_entry_use_case import (
     VehicleEntryInput,
     VehicleEntryUseCase,
@@ -57,6 +61,7 @@ from pmql.application.use_cases.subscriber_ops.register_subscriber_use_case impo
 from pmql.config import get_settings
 from pmql.domain.entities.fee_rule import FeeRule
 from pmql.domain.entities.lane import Lane
+from pmql.domain.entities.user import User
 from pmql.domain.exceptions import DomainError
 from pmql.domain.services.fee_calculator import FeeCalculator
 from pmql.infrastructure.hardware.mock_hardware import MockBarrierController
@@ -90,6 +95,7 @@ async def cmd_init_db() -> None:
     async with db.session() as session:
         lane_repo: ILaneRepository = SQLiteLaneRepository(session)
         fee_repo = SQLiteFeeRuleRepository(session)
+        user_repo = SQLiteUserRepository(session)
 
         if await lane_repo.get_by_id(DEFAULT_LANE_ID) is None:
             await lane_repo.create(
@@ -129,6 +135,12 @@ async def cmd_init_db() -> None:
                 )
             )
             print("Created fee rule: car (20,000 VND/gio, toi da 200,000 VND/ngay)")
+        if await user_repo.get_by_username("admin") is None:
+            await user_repo.create(User(
+                branch_id=settings.branch_id, username="admin", full_name="Quản trị viên",
+                role="ADMIN", password_hash=PBKDF2PasswordHasher().hash("123"),
+            ))
+            print("Created default admin account: admin / 123")
 
     await db.dispose()
     print("Database ready at:", settings.local_database_url)
@@ -311,6 +323,82 @@ async def cmd_ack_alert(alert_id: str, user_id: str) -> None:
     print(f"Xac nhan alert OK -> alert_id={alert_id} boi user_id={user_id}")
 
 
+async def cmd_list_subscribers() -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        items = await SQLiteSubscriberRepository(session).list_all()
+    await db.dispose()
+    for item in items:
+        print(f"{item.id}  {item.full_name}  {item.phone}  {item.vehicle_type}  active={item.is_active}")
+
+
+async def cmd_update_subscriber(args: argparse.Namespace) -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).update(SubscriberUpdateInput(
+            args.subscriber_id, args.full_name, args.phone, args.vehicle_type,
+            date.fromisoformat(args.valid_from), date.fromisoformat(args.valid_until), args.email, not args.inactive,
+        ))
+    await db.dispose(); print("Cap nhat thue bao OK")
+
+
+async def cmd_delete_subscriber(subscriber_id: str) -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).delete(subscriber_id)
+    await db.dispose(); print("Xoa thue bao OK")
+
+
+def _fee_input(args: argparse.Namespace, branch_id: str) -> FeeRuleInput:
+    return FeeRuleInput(branch_id, args.name, args.vehicle_type, args.free_minutes, args.block_minutes,
+                        args.price_per_block, args.day_max, not args.inactive)
+
+
+async def cmd_fee_rule(args: argparse.Namespace) -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        repo = SQLiteFeeRuleRepository(session); use_case = FeeRuleManagementUseCase(repo)
+        if args.command == "list-fee-rules":
+            for rule in await repo.list_all():
+                print(f"{rule.id}  {rule.name}  {rule.vehicle_type}  {rule.price_per_block:,} VND/{rule.block_minutes}p active={rule.is_active}")
+        elif args.command == "create-fee-rule":
+            print(f"Tao bieu phi OK -> rule_id={await use_case.create(_fee_input(args, settings.branch_id))}")
+        elif args.command == "update-fee-rule":
+            await use_case.update(args.rule_id, _fee_input(args, settings.branch_id)); print("Cap nhat bieu phi OK")
+        else:
+            await use_case.delete(args.rule_id); print("Xoa bieu phi OK")
+    await db.dispose()
+
+
+async def cmd_user_management(args: argparse.Namespace) -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        repo = SQLiteUserRepository(session); use_case = UserManagementUseCase(repo, PBKDF2PasswordHasher())
+        if args.command == "list-users":
+            for user in await repo.list_all():
+                print(f"{user.id}  {user.username}  {user.full_name}  {user.role} active={user.is_active}")
+        elif args.command == "update-user":
+            await use_case.update(UserUpdateInput(args.user_id, args.full_name, args.role, not args.inactive, args.password))
+            print("Cap nhat tai khoan OK")
+        else:
+            await use_case.delete(args.user_id); print("Xoa tai khoan OK")
+    await db.dispose()
+
+
+async def cmd_reset_password(username: str, password: str) -> None:
+    settings = get_settings(); db = Database(settings.local_database_url)
+    async with db.session() as session:
+        repo = SQLiteUserRepository(session)
+        user = await repo.get_by_username(username)
+        if user is None:
+            from pmql.domain.exceptions import UserNotFoundError
+            raise UserNotFoundError(username)
+        await UserManagementUseCase(repo, PBKDF2PasswordHasher()).update(
+            UserUpdateInput(user.id, user.full_name, user.role, user.is_active, password)
+        )
+    await db.dispose(); print(f"Da doi mat khau cho {username}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pmql", description="PMQL Bai Xe — CLI demo")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -360,6 +448,50 @@ def build_parser() -> argparse.ArgumentParser:
     p_reg_sub.add_argument("--email", default=None)
     p_reg_sub.add_argument("--rfid", default=None, help="Issue/re-link an RFID card immediately")
 
+    sub.add_parser("list-subscribers", help="List monthly-pass subscribers")
+    p_update_sub = sub.add_parser("update-subscriber", help="Edit a monthly-pass subscriber")
+    p_update_sub.add_argument("--subscriber-id", required=True)
+    p_update_sub.add_argument("--full-name", required=True)
+    p_update_sub.add_argument("--phone", required=True)
+    p_update_sub.add_argument("--vehicle-type", required=True, choices=["motorbike", "car", "truck"])
+    p_update_sub.add_argument("--valid-from", required=True)
+    p_update_sub.add_argument("--valid-until", required=True)
+    p_update_sub.add_argument("--email", default=None)
+    p_update_sub.add_argument("--inactive", action="store_true")
+    p_delete_sub = sub.add_parser("delete-subscriber", help="Delete a monthly-pass subscriber")
+    p_delete_sub.add_argument("--subscriber-id", required=True)
+
+    def add_fee_arguments(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--name", required=True)
+        command.add_argument("--vehicle-type", required=True, choices=["motorbike", "car", "truck"])
+        command.add_argument("--free-minutes", type=int, default=10)
+        command.add_argument("--block-minutes", type=int, default=60)
+        command.add_argument("--price-per-block", type=int, required=True)
+        command.add_argument("--day-max", type=int, default=None)
+        command.add_argument("--inactive", action="store_true")
+
+    p_create_fee = sub.add_parser("create-fee-rule", help="Create a fee rule")
+    add_fee_arguments(p_create_fee)
+    p_update_fee = sub.add_parser("update-fee-rule", help="Edit a fee rule")
+    p_update_fee.add_argument("--rule-id", required=True)
+    add_fee_arguments(p_update_fee)
+    p_delete_fee = sub.add_parser("delete-fee-rule", help="Delete a fee rule")
+    p_delete_fee.add_argument("--rule-id", required=True)
+    sub.add_parser("list-fee-rules", help="List fee rules")
+
+    sub.add_parser("list-users", help="List user accounts")
+    p_update_user = sub.add_parser("update-user", help="Edit an account or reset its password")
+    p_update_user.add_argument("--user-id", required=True)
+    p_update_user.add_argument("--full-name", required=True)
+    p_update_user.add_argument("--role", required=True, choices=["OPERATOR", "SUPERVISOR", "ADMIN"])
+    p_update_user.add_argument("--password", default=None)
+    p_update_user.add_argument("--inactive", action="store_true")
+    p_delete_user = sub.add_parser("delete-user", help="Delete an account")
+    p_delete_user.add_argument("--user-id", required=True)
+    p_reset_password = sub.add_parser("reset-password", help="Reset a user's password")
+    p_reset_password.add_argument("--username", required=True)
+    p_reset_password.add_argument("--password", required=True)
+
     p_ack = sub.add_parser("ack-alert", help="Acknowledge a system alert")
     p_ack.add_argument("--alert-id", dest="alert_id", required=True)
     p_ack.add_argument("--user-id", dest="user_id", required=True)
@@ -400,6 +532,18 @@ def main() -> None:
                     args.valid_until, args.email, args.rfid,
                 )
             )
+        elif args.command == "list-subscribers":
+            asyncio.run(cmd_list_subscribers())
+        elif args.command == "update-subscriber":
+            asyncio.run(cmd_update_subscriber(args))
+        elif args.command == "delete-subscriber":
+            asyncio.run(cmd_delete_subscriber(args.subscriber_id))
+        elif args.command in {"list-fee-rules", "create-fee-rule", "update-fee-rule", "delete-fee-rule"}:
+            asyncio.run(cmd_fee_rule(args))
+        elif args.command in {"list-users", "update-user", "delete-user"}:
+            asyncio.run(cmd_user_management(args))
+        elif args.command == "reset-password":
+            asyncio.run(cmd_reset_password(args.username, args.password))
         elif args.command == "ack-alert":
             asyncio.run(cmd_ack_alert(args.alert_id, args.user_id))
     except DomainError as exc:

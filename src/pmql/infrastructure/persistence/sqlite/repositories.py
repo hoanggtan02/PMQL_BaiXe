@@ -621,6 +621,12 @@ class SQLiteUserRepository:
         row.sync_version = user.sync_version
         await self._session.flush()
 
+    async def delete(self, user_id: str) -> None:
+        row = await self._session.get(UserModel, user_id)
+        if row is not None:
+            await self._session.delete(row)
+            await self._session.flush()
+
     async def list_all(self) -> list[User]:
         result = await self._session.execute(select(UserModel))
         return [_user_to_entity(r) for r in result.scalars().all()]
