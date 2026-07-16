@@ -18,7 +18,12 @@ from pmql.application.ports.repositories import (
 from pmql.application.ports.sync_port import ISyncOutboxWriter
 from pmql.domain.entities.session import ParkingSession
 from pmql.domain.entities.vehicle import Vehicle
-from pmql.domain.exceptions import CardNotActiveError, CardNotFoundError, LaneNotFoundError
+from pmql.domain.exceptions import (
+    CardNotActiveError,
+    CardNotFoundError,
+    LaneNotFoundError,
+    VehicleAlreadyInsideError,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -93,10 +98,40 @@ class VehicleEntryUseCase:
         # 3. Resolve plate number
         plate = inp.plate_number or ""
 
-        # 4. Create session (write to local SQLite first — outbox in same tx)
+        # 4. Reject a second entry for a vehicle that never checked out.
+        #    Without this a lost/duplicate scan would silently create two
+        #    ACTIVE sessions for the same plate, breaking exit lookup and fee
+        #    billing.
+        if plate:
+            existing = await self._sessions.get_active_by_plate(plate)
+            if existing is not None:
+                raise VehicleAlreadyInsideError(plate)
+        if rfid_card_id:
+            existing_by_card = await self._sessions.get_active_by_rfid(rfid_card_id)
+            if existing_by_card is not None:
+                raise VehicleAlreadyInsideError(rfid_card_id)
+
+        # 5. Find or create the Vehicle record so session.vehicle_id is
+        #    always populated (previously left as None forever).
+        vehicle_id: str | None = None
+        if plate:
+            vehicle = await self._vehicles.get_by_plate(plate)
+            if vehicle is None:
+                vehicle = Vehicle(
+                    branch_id=lane.branch_id,
+                    plate_number=plate,
+                    vehicle_type=resolved_vehicle_type,
+                    rfid_tag=inp.rfid_code,
+                    subscriber_id=subscriber_id,
+                )
+                await self._vehicles.create(vehicle)
+            vehicle_id = vehicle.id
+
+        # 6. Create session (write to local SQLite first — outbox in same tx)
         session = ParkingSession(
             branch_id=lane.branch_id,
             lane_in_id=inp.lane_id,
+            vehicle_id=vehicle_id,
             plate_number=plate,
             rfid_card_id=rfid_card_id,
             subscriber_id=subscriber_id,
@@ -114,7 +149,7 @@ class VehicleEntryUseCase:
             payload=self._session_to_dict(session),
         )
 
-        # 5. Open barrier
+        # 7. Open barrier
         barrier_opened = False
         try:
             await self._barrier.open()
@@ -137,6 +172,7 @@ class VehicleEntryUseCase:
             "id": s.id,
             "branch_id": s.branch_id,
             "lane_in_id": s.lane_in_id,
+            "vehicle_id": s.vehicle_id,
             "plate_number": s.plate_number,
             "rfid_card_id": s.rfid_card_id,
             "subscriber_id": s.subscriber_id,

@@ -12,6 +12,7 @@ from pmql.application.ports.repositories import (
     IFeeRuleRepository,
     ISessionRepository,
     ISubscriberRepository,
+    IVehicleRepository,
 )
 from pmql.application.ports.sync_port import ISyncOutboxWriter
 from pmql.domain.entities.session import ParkingSession
@@ -54,6 +55,7 @@ class VehicleExitUseCase:
         card_repo: ICardRepository,
         fee_rule_repo: IFeeRuleRepository,
         subscriber_repo: ISubscriberRepository,
+        vehicle_repo: IVehicleRepository,
         barrier: IBarrierController,
         fee_calculator: FeeCalculator,
         outbox: ISyncOutboxWriter,
@@ -62,6 +64,7 @@ class VehicleExitUseCase:
         self._cards = card_repo
         self._fee_rules = fee_rule_repo
         self._subscribers = subscriber_repo
+        self._vehicles = vehicle_repo
         self._barrier = barrier
         self._calculator = fee_calculator
         self._outbox = outbox
@@ -96,12 +99,31 @@ class VehicleExitUseCase:
                 fee = Money.zero()  # subscriber pass — no charge
 
         if not is_subscriber:
-            # Determine vehicle type from original session data
-            vehicle_type = "motorbike"  # default
-            if session.rfid_card_id:
+            # Resolve the real vehicle_type. Priority:
+            #  1. Vehicle record matched by plate number (most reliable).
+            #  2. Vehicle record matched by the RFID card's linked vehicle_id.
+            #  3. Fallback to 'motorbike' — logged as a warning since billing
+            #     a car/truck at the motorbike rate would undercharge them.
+            vehicle_type: str | None = None
+
+            vehicle = await self._vehicles.get_by_plate(session.plate_number) if session.plate_number else None
+
+            if vehicle is None and session.rfid_card_id:
                 card = await self._cards.get_by_rfid_code(inp.rfid_code or "")
                 if card and card.vehicle_id:
-                    pass  # TODO: could look up vehicle type from vehicle repo
+                    vehicle = await self._vehicles.get_by_id(card.vehicle_id)
+
+            if vehicle is not None:
+                vehicle_type = vehicle.vehicle_type
+
+            if not vehicle_type:
+                vehicle_type = "motorbike"
+                log.warning(
+                    "vehicle_exit.vehicle_type_unresolved",
+                    session_id=session.id,
+                    plate=session.plate_number,
+                    fallback="motorbike",
+                )
 
             fee_rule = await self._fee_rules.get_active_by_vehicle_type(vehicle_type)
             if fee_rule is None:

@@ -49,6 +49,9 @@ class IVehicleRepository(ABC):
     async def create(self, vehicle: Vehicle) -> None: ...
 
     @abstractmethod
+    async def get_by_id(self, vehicle_id: str) -> Vehicle | None: ...
+
+    @abstractmethod
     async def get_by_plate(self, plate_number: str) -> Vehicle | None: ...
 
     @abstractmethod

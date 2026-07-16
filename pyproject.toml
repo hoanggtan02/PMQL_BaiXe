@@ -42,6 +42,9 @@ dependencies = [
     "pymodbus>=3.6",
 ]
 
+[project.scripts]
+pmql = "pmql.main:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",

@@ -43,6 +43,10 @@ class LaneNotFoundError(DomainError):
     """Lane does not exist."""
 
 
+class VehicleAlreadyInsideError(DomainError):
+    """Vehicle already has an ACTIVE session — cannot record a second entry."""
+
+
 class InvalidPlateNumberError(DomainError):
     """Plate number format is not valid."""
 
