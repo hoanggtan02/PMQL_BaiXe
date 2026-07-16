@@ -13,22 +13,28 @@ from pmql.infrastructure.security.password_hasher import PBKDF2PasswordHasher
 
 
 APP_STYLE = """
-QWidget { font-family: 'Segoe UI', Arial; color: #1d2939; font-size: 13px; }
-QLineEdit { background: #f6f8fb; border: 1px solid #e4e7ec; border-radius: 8px; padding: 11px 12px; }
-QLineEdit:focus { background: white; border: 2px solid #f79009; }
-QPushButton { border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 600; }
-QPushButton#loginButton { color: white; background: #f27816; font-size: 14px; }
-QPushButton#loginButton:hover { background: #dd6510; }
-QPushButton#navButton { color: #b8bdc9; background: transparent; text-align: left; padding: 10px 14px; }
-QPushButton#navButton:hover, QPushButton#navButton[active='true'] { color: white; background: #35313a; }
+QWidget { font-family: 'Segoe UI', Arial; color: #172b4d; font-size: 13px; }
+QLineEdit { background: #f7f9fc; border: 1px solid #dfe5ef; border-radius: 10px; padding: 12px 14px; selection-background-color: #2e90fa; }
+QLineEdit:focus { background: white; border: 2px solid #2e90fa; }
+QPushButton { border: 0; border-radius: 9px; padding: 10px 14px; font-weight: 700; }
+QPushButton#loginButton { color: white; background: #f47521; font-size: 14px; min-height: 22px; }
+QPushButton#loginButton:hover { background: #dc6803; }
+QPushButton#navButton { color: #9eabc0; background: transparent; text-align: left; padding: 11px 13px; border-radius: 8px; }
+QPushButton#navButton:hover { color: #f2f4f7; background: #24314c; }
+QPushButton#navButton[active='true'] { color: white; background: #263d66; border-left: 3px solid #f79009; padding-left: 10px; }
 QPushButton#actionGreen { background: #12b76a; color: white; }
+QPushButton#actionGreen:hover { background: #039855; }
 QPushButton#actionRed { background: #f04438; color: white; }
+QPushButton#actionRed:hover { background: #d92d20; }
 QPushButton#actionOrange { background: #f79009; color: white; }
-QFrame#metric { background: white; border: 1px solid #eaecf0; border-radius: 10px; }
-QFrame#lane { background: white; border: 1px solid #eaecf0; border-radius: 12px; }
-QLabel#muted { color: #98a2b3; }
-QLabel#badge { background: #ecfdf3; color: #027a48; border-radius: 9px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
-QLabel#camera { background: #1d1b20; color: #75e345; border-radius: 8px; font-weight: 600; }
+QPushButton#actionOrange:hover { background: #dc6803; }
+QFrame#metric { background: white; border: 1px solid #e4e7ec; border-radius: 12px; }
+QFrame#lane { background: white; border: 1px solid #e4e7ec; border-radius: 12px; }
+QFrame#lane:hover { border: 1px solid #98a2b3; }
+QLabel#muted { color: #8b98ac; }
+QLabel#section { color: #7d899c; font-size: 10px; font-weight: 800; padding: 8px 12px 3px; }
+QLabel#badge { background: #e8f8ef; color: #087443; border-radius: 10px; padding: 4px 8px; font-size: 10px; font-weight: 800; }
+QLabel#camera { background: #101828; color: #86efac; border-radius: 8px; font-weight: 700; }
 """
 
 
@@ -61,7 +67,7 @@ def launch(settings: Settings) -> int:
         def __init__(self) -> None:
             super().__init__()
             self.setWindowTitle("PMQL Bãi Xe – Đăng nhập")
-            self.setMinimumSize(1040, 650)
+            self.setMinimumSize(1120, 680)
             self.setStyleSheet(APP_STYLE)
 
             root = QHBoxLayout(self)
@@ -71,19 +77,19 @@ def launch(settings: Settings) -> int:
             hero = QFrame()
             hero.setStyleSheet("""
                 QFrame { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 #26232a, stop:.52 #253452, stop:1 #0058a9); }
+                    stop:0 #111827, stop:.48 #1e3155, stop:1 #0756a6); }
                 QLabel { color: white; }
             """)
             hero_layout = QVBoxLayout(hero)
-            hero_layout.setContentsMargins(76, 72, 76, 72)
+            hero_layout.setContentsMargins(82, 72, 82, 72)
             hero_layout.addStretch(2)
             logo = _label("▣", bold=True)
-            logo.setStyleSheet("background: #ff8a18; border-radius: 14px; padding: 10px; font-size: 27px;")
+            logo.setStyleSheet("background: #f79009; border-radius: 16px; padding: 10px; font-size: 27px;")
             logo.setFixedSize(58, 58)
             logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
             hero_layout.addWidget(logo)
             title = _label("PMQL Bãi Xe", bold=True)
-            title.setStyleSheet("font-size: 28px; margin-top: 16px;")
+            title.setStyleSheet("font-size: 30px; margin-top: 16px; letter-spacing: .3px;")
             hero_layout.addWidget(title)
             subtitle = _label("Hệ thống quản lý bãi xe thông minh tích hợp AI")
             subtitle.setStyleSheet("color: #d0d5dd; font-size: 14px; margin-top: 3px; margin-bottom: 30px;")
@@ -110,10 +116,10 @@ def launch(settings: Settings) -> int:
             form_panel = QFrame()
             form_panel.setStyleSheet("background: #ffffff;")
             form_layout = QVBoxLayout(form_panel)
-            form_layout.setContentsMargins(54, 72, 54, 55)
+            form_layout.setContentsMargins(58, 72, 58, 55)
             form_layout.addStretch()
             heading = _label("Chào mừng trở lại", bold=True)
-            heading.setStyleSheet("font-size: 24px;")
+            heading.setStyleSheet("font-size: 26px; color: #101828;")
             form_layout.addWidget(heading)
             subheading = _label("Đăng nhập để quản lý bãi xe của bạn", object_name="muted")
             form_layout.addWidget(subheading)
@@ -163,7 +169,7 @@ def launch(settings: Settings) -> int:
         def __init__(self, result: object) -> None:
             super().__init__()
             self.setWindowTitle("PMQL Bãi Xe – Vận hành làn xe")
-            self.setMinimumSize(1250, 760)
+            self.setMinimumSize(1280, 780)
             self.setStyleSheet(APP_STYLE)
             name, role = getattr(result, "full_name"), getattr(result, "role")
             page = QWidget()
@@ -176,8 +182,8 @@ def launch(settings: Settings) -> int:
 
         def _sidebar(self, role: str) -> QWidget:
             panel = QFrame()
-            panel.setFixedWidth(225)
-            panel.setStyleSheet("QFrame { background: #211f25; } QLabel { color: white; }")
+            panel.setFixedWidth(238)
+            panel.setStyleSheet("QFrame { background: #111c31; } QLabel { color: white; }")
             layout = QVBoxLayout(panel)
             layout.setContentsMargins(12, 20, 12, 18)
             brand = _label("▣  PMQL BÃI XE", bold=True)
@@ -190,13 +196,13 @@ def launch(settings: Settings) -> int:
                 button.setProperty("active", index == 1)
                 layout.addWidget(button)
             layout.addSpacing(12)
-            layout.addWidget(_label("QUẢN LÝ", object_name="muted", bold=True))
+            layout.addWidget(_label("QUẢN LÝ", object_name="section", bold=True))
             for text in ("▣  Thuê bao", "▤  Thẻ xe", "◆  Biểu phí"):
                 button = QPushButton(text)
                 button.setObjectName("navButton")
                 layout.addWidget(button)
             if role in {"SUPERVISOR", "ADMIN"}:
-                layout.addWidget(_label("PHÂN TÍCH", object_name="muted", bold=True))
+                layout.addWidget(_label("PHÂN TÍCH", object_name="section", bold=True))
                 button = QPushButton("▰  Báo cáo")
                 button.setObjectName("navButton")
                 layout.addWidget(button)
@@ -207,12 +213,12 @@ def launch(settings: Settings) -> int:
 
         def _content(self, name: str, role: str) -> QWidget:
             page = QWidget()
-            page.setStyleSheet("background: #f8fafc;")
+            page.setStyleSheet("background: #f5f7fb;")
             layout = QVBoxLayout(page)
             layout.setContentsMargins(26, 18, 26, 24)
             top = QHBoxLayout()
             heading = _label("☰    ⚑  Vận hành làn xe", bold=True)
-            heading.setStyleSheet("font-size: 17px;")
+            heading.setStyleSheet("font-size: 18px; color: #101828;")
             top.addWidget(heading)
             top.addStretch()
             online = _label("● Kết nối", object_name="badge", bold=True)
@@ -222,7 +228,9 @@ def launch(settings: Settings) -> int:
             layout.addLayout(top)
             layout.addSpacing(18)
             controls = QHBoxLayout()
-            controls.addWidget(_label("— Tất cả làn —", bold=True))
+            filter_chip = _label("⌄  Tất cả làn xe", bold=True)
+            filter_chip.setStyleSheet("background: white; border: 1px solid #dfe5ef; border-radius: 8px; padding: 8px 11px;")
+            controls.addWidget(filter_chip)
             controls.addSpacing(20)
             controls.addWidget(_label("Chưa mở ca", object_name="badge"))
             controls.addStretch()
@@ -232,7 +240,7 @@ def launch(settings: Settings) -> int:
             layout.addLayout(controls)
             metrics = QFrame()
             metrics.setObjectName("metric")
-            metrics.setStyleSheet("QFrame#metric { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #182a64, stop:1 #625682); }")
+            metrics.setStyleSheet("QFrame#metric { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #142d5b, stop:.58 #244c8e, stop:1 #513e7d); }")
             metric_layout = QHBoxLayout(metrics)
             for value, caption, color in (("0 xe", "XE TRONG BÃI", "#ffffff"), ("0 đ", "DOANH THU HÔM NAY", "#6ce9a6"), ("0 đ", "DOANH THU CA NÀY", "#f9d36a"), ("0 lượt", "LƯỢT XE HÔM NAY", "#8bd5ff")):
                 block = QVBoxLayout()
@@ -240,7 +248,7 @@ def launch(settings: Settings) -> int:
                 v.setStyleSheet(f"color: {color}; font-size: 18px;")
                 block.addWidget(v)
                 c = _label(caption)
-                c.setStyleSheet("color: #cbd5e1; font-size: 10px;")
+                c.setStyleSheet("color: #d0d9e8; font-size: 10px; font-weight: 700;")
                 block.addWidget(c)
                 metric_layout.addLayout(block)
                 metric_layout.addStretch()
@@ -271,7 +279,7 @@ def launch(settings: Settings) -> int:
             layout.addWidget(state)
             plate = _label("—")
             plate.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            plate.setStyleSheet("background: #fff9df; border: 2px solid #f9d36a; border-radius: 7px; font-size: 24px; padding: 8px;")
+            plate.setStyleSheet("background: #fff8e5; border: 2px solid #f6c453; border-radius: 8px; font-size: 24px; padding: 8px; color: #7a5400;")
             layout.addWidget(plate)
             camera = _label("▣\nCamera đang chờ...", object_name="camera", bold=True)
             camera.setAlignment(Qt.AlignmentFlag.AlignCenter)
