@@ -472,6 +472,15 @@ class SQLiteFeeRuleRepository:
         row.sync_version = rule.sync_version
         await self._session.flush()
 
+    async def delete(self, rule_id: str) -> None:
+        # Added: IFeeRuleRepository previously had no delete() (see README
+        # "Chưa có") — callers could only soft-disable via update(is_active
+        # =False). This performs a real hard delete for retiring a rule.
+        row = await self._session.get(FeeRuleModel, rule_id)
+        if row is not None:
+            await self._session.delete(row)
+            await self._session.flush()
+
     async def list_all(self) -> list[FeeRule]:
         result = await self._session.execute(select(FeeRuleModel))
         return [_fee_rule_to_entity(r) for r in result.scalars().all()]
@@ -552,6 +561,18 @@ class SQLiteSessionRepository:
         # returning every session in the database regardless of shift.
         result = await self._session.execute(
             select(ParkingSessionModel).where(ParkingSessionModel.shift_id == shift_id)
+        )
+        return [_session_to_entity(r) for r in result.scalars().all()]
+
+    async def list_recent(self, branch_id: str, limit: int = 50) -> list[ParkingSession]:
+        # Added: backs the `list-sessions` CLI command referenced in the
+        # README but never wired up — there was previously no way to list
+        # sessions for a branch at all (only lookups by plate/rfid/shift).
+        result = await self._session.execute(
+            select(ParkingSessionModel)
+            .where(ParkingSessionModel.branch_id == branch_id)
+            .order_by(ParkingSessionModel.entry_time.desc())
+            .limit(limit)
         )
         return [_session_to_entity(r) for r in result.scalars().all()]
 

@@ -43,6 +43,16 @@ class ISessionRepository(ABC):
     @abstractmethod
     async def list_by_shift(self, shift_id: str) -> list[ParkingSession]: ...
 
+    @abstractmethod
+    async def list_recent(self, branch_id: str, limit: int = 50) -> list[ParkingSession]:
+        """List the most recent sessions for a branch (newest entry first).
+
+        Added to back the `list-sessions` CLI command mentioned in the
+        README but never registered in `build_parser()` — the use case
+        layer previously had no way to list sessions at all.
+        """
+        ...
+
 
 class IVehicleRepository(ABC):
     @abstractmethod
@@ -112,6 +122,16 @@ class IFeeRuleRepository(ABC):
 
     @abstractmethod
     async def update(self, rule: FeeRule) -> None: ...
+
+    @abstractmethod
+    async def delete(self, rule_id: str) -> None:
+        """Remove a fee rule permanently.
+
+        Was missing (see README "Chưa có") even though the rest of the
+        CRUD surface existed — callers previously had no way to retire a
+        rule other than setting `is_active=False` via `update()`.
+        """
+        ...
 
     @abstractmethod
     async def list_all(self) -> list[FeeRule]: ...

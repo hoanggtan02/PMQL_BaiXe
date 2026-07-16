@@ -19,10 +19,6 @@ class ParkingSession:
     plate_number: str = ""
     rfid_card_id: str | None = None
     subscriber_id: str | None = None  # if not None → fee = 0 (check validity in use case)
-    # Links this session to the operator Shift that was open when the vehicle
-    # entered, so CloseShiftUseCase can compute total_sessions/total_revenue.
-    # Was previously unset — list_by_shift() had no way to filter (see
-    # SQLiteSessionRepository.list_by_shift note, now fixed).
     shift_id: str | None = None
     entry_time: datetime = field(default_factory=datetime.utcnow)
     exit_time: datetime | None = None
