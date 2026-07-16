@@ -74,5 +74,9 @@ class UsernameAlreadyExistsError(DomainError):
     """Username is already taken."""
 
 
+class InvalidRoleError(DomainError):
+    """The supplied role is not one of the supported system roles."""
+
+
 class AlertNotFoundError(DomainError):
     """Alert does not exist or is not currently unacknowledged."""

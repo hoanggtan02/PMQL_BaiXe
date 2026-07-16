@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from pmql.application.ports.repositories import IUserRepository
-from pmql.application.ports.security_port import IPasswordHasher
+from pmql.application.ports.security_port import IPasswordHasher, ITokenService
 from pmql.domain.exceptions import InvalidCredentialsError
 
 log = structlog.get_logger(__name__)
@@ -30,12 +30,16 @@ class LoginOutput:
     username: str
     role: str
     full_name: str
+    access_token: str | None = None
+    token_expires_at: datetime | None = None
 
 
 class LoginUseCase:
-    def __init__(self, user_repo: IUserRepository, password_hasher: IPasswordHasher) -> None:
+    def __init__(self, user_repo: IUserRepository, password_hasher: IPasswordHasher,
+                 token_service: ITokenService | None = None) -> None:
         self._users = user_repo
         self._hasher = password_hasher
+        self._tokens = token_service
 
     async def execute(self, inp: LoginInput) -> LoginOutput:
         user = await self._users.get_by_username(inp.username)
@@ -53,4 +57,11 @@ class LoginUseCase:
         await self._users.update(user)
 
         log.info("login.success", user_id=user.id, username=user.username)
-        return LoginOutput(user_id=user.id, username=user.username, role=user.role, full_name=user.full_name)
+        token: str | None = None
+        expires_at: datetime | None = None
+        if self._tokens is not None:
+            token, claims = self._tokens.issue(
+                user_id=user.id, username=user.username, role=user.role, branch_id=user.branch_id
+            )
+            expires_at = claims.expires_at
+        return LoginOutput(user.id, user.username, user.role, user.full_name, token, expires_at)

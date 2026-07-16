@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     sync_interval_seconds: int = 10
     sync_max_retry: int = 10
     sync_backoff_base_seconds: int = 5
-    secret_key: str = "CHANGE_ME_RANDOM_64_CHARS"
+    secret_key: str = "development-only-change-before-production-7e0430d4"
     access_token_expire_minutes: int = 480
     yolo_model_path: str | None = None
     ocr_engine: str = "vietocr"

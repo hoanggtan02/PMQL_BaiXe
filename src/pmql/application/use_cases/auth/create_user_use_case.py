@@ -7,8 +7,9 @@ from dataclasses import dataclass
 
 from pmql.application.ports.repositories import IUserRepository
 from pmql.application.ports.security_port import IPasswordHasher
+from pmql.application.security import VALID_ROLES
 from pmql.domain.entities.user import User
-from pmql.domain.exceptions import UsernameAlreadyExistsError
+from pmql.domain.exceptions import InvalidRoleError, UsernameAlreadyExistsError
 
 log = structlog.get_logger(__name__)
 
@@ -33,6 +34,8 @@ class CreateUserUseCase:
         self._hasher = password_hasher
 
     async def execute(self, inp: CreateUserInput) -> CreateUserOutput:
+        if inp.role not in VALID_ROLES:
+            raise InvalidRoleError(inp.role)
         if await self._users.get_by_username(inp.username) is not None:
             raise UsernameAlreadyExistsError(inp.username)
 

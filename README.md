@@ -57,6 +57,9 @@ nhật này bổ sung phần composition-root còn thiếu đó:
 python -m pmql.main create-user --username an.nguyen --password s3cret --full-name "An Nguyen"
 python -m pmql.main login --username an.nguyen --password s3cret
 
+# Mở màn hình đăng nhập desktop (cài UI một lần: pip install -e ".[gui]")
+python -m pmql.main ui
+
 # Mở / đóng ca làm việc (đóng ca sẽ in tổng số phiên + doanh thu)
 python -m pmql.main open-shift --operator-id an.nguyen
 python -m pmql.main enter --plate 51F-12345 --type motorbike --shift-id <shift_id>
@@ -133,13 +136,6 @@ trong cùng một đợt nhỏ:
 - Worker đẩy dữ liệu từ `sync_outbox` (SQLite) lên MySQL trung tâm.
 - Alembic migrations cho schema (hiện dùng `create_all` tiện cho dev, chưa
   dùng được cho migration production).
-- Giao diện PySide6 (Desktop UI) cho nhân viên vận hành.
-- Phát hành token/session sau khi đăng nhập (`LoginUseCase` hiện chỉ xác
-  thực và trả về thông tin user; chưa có JWT hay cơ chế phiên đăng nhập
-  nào — CLI hiện chỉ in kết quả đăng nhập ra màn hình).
-- Phân quyền theo `role` (`OPERATOR` / `SUPERVISOR` / `ADMIN`) — enum tồn
-  tại trên entity `User` nhưng chưa có use case/middleware nào kiểm tra
-  quyền; CLI hiện không chặn thao tác theo role.
 - Test coverage cho tầng infrastructure ngoài các test tích hợp hiện có
   (mới có test cho domain/application qua SQLite thật, chưa test riêng
   từng repository/mapper một cách biệt lập).
@@ -165,3 +161,16 @@ trong cùng một đợt nhỏ:
   `VehicleEntryUseCase` (CLI: `enter --shift-id ...`) một khi hệ thống ca
   làm việc đã được bật lên — nếu để trống, phiên đó sẽ không được tính vào
   ca nào khi đóng ca.
+
+## Đăng nhập, phân quyền và UI desktop
+
+- `LoginUseCase` nhận thêm `JwtTokenService` tại composition root và trả về
+  access token HS256 cùng hạn dùng. Token chỉ chứa identity/role/branch, được
+  ký bằng `SECRET_KEY`, và UI chỉ giữ trong bộ nhớ.
+- `GetCurrentUserUseCase` xác thực token rồi kiểm tra user vẫn active và role
+  không bị thay đổi. `require_roles(...)` là decorator cho controller/UI/API;
+  nó yêu cầu `actor=AuthenticatedUser` và ném `InsufficientPermissionsError`
+  khi actor không có role được phép.
+- UI PySide6 là dependency tuỳ chọn: cài `pip install -e ".[gui]"`, sau đó
+  chạy `python -m pmql.main ui`. Màn hình dashboard hiển thị đúng người đang
+  đăng nhập và chỉ hiện các mục giám sát/quản trị tương ứng role.

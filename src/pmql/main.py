@@ -73,6 +73,7 @@ from pmql.infrastructure.persistence.sqlite.repositories import (
     SQLiteVehicleRepository,
 )
 from pmql.infrastructure.security.password_hasher import PBKDF2PasswordHasher
+from pmql.infrastructure.security.jwt_token_service import JwtTokenService
 from pmql.infrastructure.sync.outbox_writer import SQLiteSyncOutboxWriter
 
 log = structlog.get_logger(__name__)
@@ -230,12 +231,21 @@ async def cmd_login(username: str, password: str) -> None:
     hasher = PBKDF2PasswordHasher()
 
     async with db.session() as session:
-        use_case = LoginUseCase(SQLiteUserRepository(session), hasher)
+        use_case = LoginUseCase(
+            SQLiteUserRepository(session), hasher,
+            JwtTokenService(settings.secret_key, settings.access_token_expire_minutes),
+        )
         result = await use_case.execute(LoginInput(username=username, password=password))
 
     await db.dispose()
     print(f"Dang nhap OK -> user_id={result.user_id} username={result.username} "
           f"role={result.role} full_name={result.full_name}")
+    print(f"access_token={result.access_token}")
+
+
+def cmd_ui() -> None:
+    from pmql.ui.app import launch
+    raise SystemExit(launch(get_settings()))
 
 
 async def cmd_open_shift(operator_id: str) -> None:
@@ -332,6 +342,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_login.add_argument("--username", required=True)
     p_login.add_argument("--password", required=True)
 
+    sub.add_parser("ui", help="Launch the PySide6 desktop login screen")
+
     p_open_shift = sub.add_parser("open-shift", help="Open a new work shift for an operator")
     p_open_shift.add_argument("--operator-id", dest="operator_id", required=True)
 
@@ -375,6 +387,8 @@ def main() -> None:
             asyncio.run(cmd_create_user(args.username, args.password, args.full_name, args.role))
         elif args.command == "login":
             asyncio.run(cmd_login(args.username, args.password))
+        elif args.command == "ui":
+            cmd_ui()
         elif args.command == "open-shift":
             asyncio.run(cmd_open_shift(args.operator_id))
         elif args.command == "close-shift":
