@@ -6,7 +6,6 @@ import structlog
 from dataclasses import dataclass
 from datetime import datetime
 
-from pmql.application.ports.hardware_ports import IANPREngine, IBarrierController, ICameraSource, ICardReader
 from pmql.application.ports.repositories import (
     ICardRepository,
     IFeeRuleRepository,
@@ -15,6 +14,7 @@ from pmql.application.ports.repositories import (
     ISubscriberRepository,
     IVehicleRepository,
 )
+from pmql.application.ports.hardware_ports import IBarrierController
 from pmql.application.ports.sync_port import ISyncOutboxWriter
 from pmql.domain.entities.session import ParkingSession
 from pmql.domain.entities.vehicle import Vehicle
@@ -35,6 +35,10 @@ class VehicleEntryInput:
     plate_number: str | None = None     # from ANPR or manual input
     vehicle_type: str = "motorbike"
     operator_id: str = ""
+    # Added: the operator's currently OPEN shift, if any. Stamped onto the
+    # session so CloseShiftUseCase can later total up this shift's sessions.
+    # Callers that don't track shifts yet can simply omit it.
+    shift_id: str | None = None
 
 
 @dataclass
@@ -99,9 +103,6 @@ class VehicleEntryUseCase:
         plate = inp.plate_number or ""
 
         # 4. Reject a second entry for a vehicle that never checked out.
-        #    Without this a lost/duplicate scan would silently create two
-        #    ACTIVE sessions for the same plate, breaking exit lookup and fee
-        #    billing.
         if plate:
             existing = await self._sessions.get_active_by_plate(plate)
             if existing is not None:
@@ -112,7 +113,7 @@ class VehicleEntryUseCase:
                 raise VehicleAlreadyInsideError(rfid_card_id)
 
         # 5. Find or create the Vehicle record so session.vehicle_id is
-        #    always populated (previously left as None forever).
+        #    always populated.
         vehicle_id: str | None = None
         if plate:
             vehicle = await self._vehicles.get_by_plate(plate)
@@ -135,6 +136,7 @@ class VehicleEntryUseCase:
             plate_number=plate,
             rfid_card_id=rfid_card_id,
             subscriber_id=subscriber_id,
+            shift_id=inp.shift_id,
             entry_time=datetime.utcnow(),
             status="ACTIVE",
         )
@@ -176,6 +178,7 @@ class VehicleEntryUseCase:
             "plate_number": s.plate_number,
             "rfid_card_id": s.rfid_card_id,
             "subscriber_id": s.subscriber_id,
+            "shift_id": s.shift_id,
             "entry_time": s.entry_time.isoformat(),
             "fee_amount": s.fee_amount,
             "status": s.status,

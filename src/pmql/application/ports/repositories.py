@@ -167,6 +167,9 @@ class IAlertRepository(ABC):
     async def create(self, alert: Alert) -> None: ...
 
     @abstractmethod
+    async def get_by_id(self, alert_id: str) -> Alert | None: ...
+
+    @abstractmethod
     async def update(self, alert: Alert) -> None: ...
 
     @abstractmethod

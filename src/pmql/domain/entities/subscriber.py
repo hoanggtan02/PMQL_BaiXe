@@ -1,7 +1,5 @@
 """Domain entity: Subscriber (monthly pass holder)."""
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from uuid import uuid4
@@ -9,8 +7,6 @@ from uuid import uuid4
 
 @dataclass
 class Subscriber:
-    """A person with a monthly/periodic parking pass."""
-
     id: str = field(default_factory=lambda: str(uuid4()))
     branch_id: str = ""
     full_name: str = ""

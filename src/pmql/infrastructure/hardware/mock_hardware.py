@@ -1,25 +1,12 @@
-"""Mock hardware adapters.
-
-Implement the `application/ports/hardware_ports.py` interfaces without
-any real device so the business logic (use cases) can run and be
-tested end-to-end on a laptop with no camera / RFID reader / barrier
-attached. Swap these for real drivers (OpenCV capture, pyserial,
-pymodbus, ...) once hardware is available — the use cases never need
-to change because they only depend on the interfaces.
-"""
-
+"""Mock hardware adapters."""
 from __future__ import annotations
-
 import structlog
-
 from pmql.application.ports.hardware_ports import CardReadResult, PlateDetectionResult
 
 log = structlog.get_logger(__name__)
 
 
 class MockBarrierController:
-    """Barrier that always succeeds and just logs state changes."""
-
     def __init__(self) -> None:
         self._status = "CLOSED"
 
@@ -36,13 +23,10 @@ class MockBarrierController:
 
 
 class MockCardReader:
-    """Card reader you can feed a code to programmatically (for demos/tests)."""
-
     def __init__(self) -> None:
         self._next_code: str | None = None
 
     def simulate_scan(self, rfid_code: str) -> None:
-        """Test/demo helper: queue a code to be 'read' on the next call."""
         self._next_code = rfid_code
 
     async def start(self) -> None:
@@ -59,8 +43,6 @@ class MockCardReader:
 
 
 class MockCameraSource:
-    """Camera stub — returns an empty frame, never touches real hardware."""
-
     async def start(self) -> None:
         log.info("mock_camera.start")
 
@@ -72,8 +54,6 @@ class MockCameraSource:
 
 
 class MockANPREngine:
-    """ANPR stub you can feed a plate to programmatically (for demos/tests)."""
-
     def __init__(self) -> None:
         self._next_plate: str | None = None
 

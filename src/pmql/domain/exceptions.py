@@ -53,3 +53,26 @@ class InvalidPlateNumberError(DomainError):
 
 class InsufficientPermissionsError(DomainError):
     """User lacks permission for this operation."""
+
+
+# ── Added: shift / auth / alert use cases ──────────────────────────────────
+
+
+class ShiftAlreadyOpenError(DomainError):
+    """Operator already has an OPEN shift — must close it before opening another."""
+
+
+class ShiftNotFoundError(DomainError):
+    """No open shift found for this operator."""
+
+
+class InvalidCredentialsError(DomainError):
+    """Username/password combination is invalid, or the user is inactive."""
+
+
+class UsernameAlreadyExistsError(DomainError):
+    """Username is already taken."""
+
+
+class AlertNotFoundError(DomainError):
+    """Alert does not exist or is not currently unacknowledged."""

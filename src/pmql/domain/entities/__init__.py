@@ -12,14 +12,6 @@ from pmql.domain.entities.user import User
 from pmql.domain.entities.vehicle import Vehicle
 
 __all__ = [
-    "Alert",
-    "Card",
-    "Device",
-    "FeeRule",
-    "Lane",
-    "ParkingSession",
-    "Shift",
-    "Subscriber",
-    "User",
-    "Vehicle",
+    "Alert", "Card", "Device", "FeeRule", "Lane", "ParkingSession",
+    "Shift", "Subscriber", "User", "Vehicle",
 ]

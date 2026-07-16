@@ -72,11 +72,23 @@ class VehicleExitUseCase:
     async def execute(self, inp: VehicleExitInput) -> VehicleExitOutput:
         log.info("vehicle_exit.start", lane_id=inp.lane_id, rfid=inp.rfid_code, plate=inp.plate_number)
 
-        # 1. Locate active session
+        # 1. Locate active session.
+        #
+        # BUGFIX: `ParkingSession.rfid_card_id` stores the *Card entity's
+        # internal id* (see VehicleEntryUseCase — it sets
+        # `rfid_card_id = card.id`), not the raw scanned RFID code. The
+        # previous version called `get_active_by_rfid(inp.rfid_code)` with
+        # the raw scanned code directly, which never matched the stored
+        # card id — so a vehicle that entered via RFID could never be
+        # found by RFID on exit (only by plate, if provided). We now
+        # resolve the Card first, exactly as entry does.
         session: ParkingSession | None = None
+        card = None
 
         if inp.rfid_code:
-            session = await self._sessions.get_active_by_rfid(inp.rfid_code)
+            card = await self._cards.get_by_rfid_code(inp.rfid_code)
+            if card is not None:
+                session = await self._sessions.get_active_by_rfid(card.id)
 
         if session is None and inp.plate_number:
             session = await self._sessions.get_active_by_plate(inp.plate_number)
@@ -109,7 +121,10 @@ class VehicleExitUseCase:
             vehicle = await self._vehicles.get_by_plate(session.plate_number) if session.plate_number else None
 
             if vehicle is None and session.rfid_card_id:
-                card = await self._cards.get_by_rfid_code(inp.rfid_code or "")
+                # Reuse the card resolved in step 1 when possible; otherwise
+                # (e.g. exit was matched by plate only) look it up by its id.
+                if card is None:
+                    card = await self._cards.get_by_id(session.rfid_card_id)
                 if card and card.vehicle_id:
                     vehicle = await self._vehicles.get_by_id(card.vehicle_id)
 
@@ -181,6 +196,7 @@ class VehicleExitUseCase:
             "plate_number": s.plate_number,
             "rfid_card_id": s.rfid_card_id,
             "subscriber_id": s.subscriber_id,
+            "shift_id": s.shift_id,
             "entry_time": s.entry_time.isoformat(),
             "exit_time": s.exit_time.isoformat() if s.exit_time else None,
             "fee_amount": s.fee_amount,

@@ -110,6 +110,10 @@ class ParkingSessionModel(Base):
     plate_number: Mapped[str] = mapped_column(String(20), index=True)
     rfid_card_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     subscriber_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Added: links a session to the operator Shift open at entry time, so
+    # CloseShiftUseCase can compute totals via list_by_shift(). Previously
+    # missing, which left list_by_shift() unable to filter at all.
+    shift_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     entry_time: Mapped[datetime] = mapped_column(DateTime)
     exit_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fee_rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
@@ -123,20 +127,86 @@ class ParkingSessionModel(Base):
 
 
 class SyncOutboxModel(Base):
-    """Pending records to push to the central MySQL database.
-
-    Written in the SAME transaction as the business write so that a
-    crash can never lose a sync event (the classic "transactional
-    outbox" pattern).
-    """
+    """Pending records to push to the central MySQL database."""
 
     __tablename__ = "sync_outbox"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     entity_table: Mapped[str] = mapped_column(String(60))
     entity_id: Mapped[str] = mapped_column(String(36))
-    operation: Mapped[str] = mapped_column(String(10))  # INSERT | UPDATE | DELETE
+    operation: Mapped[str] = mapped_column(String(10))
     payload_json: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Added: models for the repositories that already had ports/interfaces
+# (IUserRepository, IShiftRepository, IAlertRepository, IDeviceRepository)
+# but no SQLite table/implementation backing them yet.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class UserModel(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    branch_id: Mapped[str] = mapped_column(String(36))
+    username: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    full_name: Mapped[str] = mapped_column(String(120))
+    role: Mapped[str] = mapped_column(String(20), default="OPERATOR")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sync_version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class ShiftModel(Base):
+    __tablename__ = "shifts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    branch_id: Mapped[str] = mapped_column(String(36))
+    operator_id: Mapped[str] = mapped_column(String(36), index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    total_sessions: Mapped[int] = mapped_column(Integer, default=0)
+    total_revenue: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="OPEN", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sync_version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class AlertModel(Base):
+    __tablename__ = "alerts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    branch_id: Mapped[str] = mapped_column(String(36))
+    alert_type: Mapped[str] = mapped_column(String(40))
+    severity: Mapped[str] = mapped_column(String(20), default="INFO")
+    message: Mapped[str] = mapped_column(Text)
+    related_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sync_version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class DeviceModel(Base):
+    __tablename__ = "devices"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    branch_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(120))
+    device_type: Mapped[str] = mapped_column(String(20))
+    connection_string: Mapped[str] = mapped_column(String(255))
+    is_online: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sync_version: Mapped[int] = mapped_column(Integer, default=1)

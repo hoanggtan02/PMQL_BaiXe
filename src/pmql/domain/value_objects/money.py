@@ -1,68 +1,43 @@
-"""Value Object: Money — integer-only, unit = VND (đồng).
-
-RULE: All monetary values are stored and calculated as int.
-      float is STRICTLY FORBIDDEN for money arithmetic.
-"""
-
+"""Value Object: Money — integer-only, unit = VND (đồng)."""
 from __future__ import annotations
-
 from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class Money:
-    """Immutable money value in VND (integer)."""
-
     amount: int
 
     def __post_init__(self) -> None:
         if not isinstance(self.amount, int):
-            raise TypeError(
-                f"Money.amount must be int (VND), got {type(self.amount).__name__}. "
-                "Using float for money is strictly forbidden."
-            )
+            raise TypeError(f"Money.amount must be int (VND), got {type(self.amount).__name__}.")
         if self.amount < 0:
             raise ValueError(f"Money amount cannot be negative, got {self.amount}")
 
     def __add__(self, other: Money) -> Money:
-        if not isinstance(other, Money):
-            raise TypeError(f"Cannot add Money and {type(other).__name__}")
         return Money(self.amount + other.amount)
 
     def __sub__(self, other: Money) -> Money:
-        if not isinstance(other, Money):
-            raise TypeError(f"Cannot subtract Money and {type(other).__name__}")
         result = self.amount - other.amount
         if result < 0:
             raise ValueError("Money subtraction result cannot be negative")
         return Money(result)
 
     def __lt__(self, other: Money) -> bool:
-        if not isinstance(other, Money):
-            return NotImplemented
         return self.amount < other.amount
 
     def __le__(self, other: Money) -> bool:
-        if not isinstance(other, Money):
-            return NotImplemented
         return self.amount <= other.amount
 
     def __gt__(self, other: Money) -> bool:
-        if not isinstance(other, Money):
-            return NotImplemented
         return self.amount > other.amount
 
     def __ge__(self, other: Money) -> bool:
-        if not isinstance(other, Money):
-            return NotImplemented
         return self.amount >= other.amount
 
     def min(self, other: Money) -> Money:
-        """Return the lesser of two Money values."""
         return self if self.amount <= other.amount else other
 
     def max(self, other: Money) -> Money:
-        """Return the greater of two Money values."""
         return self if self.amount >= other.amount else other
 
     def __repr__(self) -> str:
