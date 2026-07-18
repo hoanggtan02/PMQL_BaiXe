@@ -66,6 +66,7 @@ from pmql.domain.exceptions import DomainError
 from pmql.domain.services.fee_calculator import FeeCalculator
 from pmql.infrastructure.hardware.mock_hardware import MockBarrierController
 from pmql.infrastructure.persistence.sqlite.database import Database
+from pmql.infrastructure.persistence.sqlite.authorization_repository import SQLiteAuthorizationRepository
 from pmql.infrastructure.persistence.sqlite.repositories import (
     SQLiteAlertRepository,
     SQLiteCardRepository,
@@ -96,6 +97,7 @@ async def cmd_init_db() -> None:
         lane_repo: ILaneRepository = SQLiteLaneRepository(session)
         fee_repo = SQLiteFeeRuleRepository(session)
         user_repo = SQLiteUserRepository(session)
+        await SQLiteAuthorizationRepository(session).ensure_starter_roles()
 
         if await lane_repo.get_by_id(DEFAULT_LANE_ID) is None:
             await lane_repo.create(

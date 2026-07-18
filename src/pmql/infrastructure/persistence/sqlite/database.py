@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import text
 from pmql.infrastructure.persistence.sqlite.models import Base
 
 
@@ -18,6 +19,13 @@ class Database:
 
     async def create_all(self) -> None:
         async with self.engine.begin() as conn:
+            # Lightweight compatibility migration for existing local MVP DBs.
+            # Production deployments should move this to Alembic.
+            if self.engine.url.get_backend_name() == "sqlite":
+                for table in ("lanes", "subscribers", "cards", "fee_rules", "users"):
+                    columns = (await conn.execute(text(f"PRAGMA table_info({table})"))).mappings().all()
+                    if columns and "is_deleted" not in {column["name"] for column in columns}:
+                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
             await conn.run_sync(Base.metadata.create_all)
 
     @asynccontextmanager

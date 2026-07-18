@@ -28,6 +28,7 @@ class LaneModel(Base):
     rfid_device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     barrier_device_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sync_version: Mapped[int] = mapped_column(Integer, default=1)
@@ -59,6 +60,7 @@ class SubscriberModel(Base):
     valid_from: Mapped[date] = mapped_column(Date)
     valid_until: Mapped[date] = mapped_column(Date)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sync_version: Mapped[int] = mapped_column(Integer, default=1)
@@ -73,6 +75,7 @@ class CardModel(Base):
     subscriber_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     vehicle_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -94,6 +97,7 @@ class FeeRuleModel(Base):
     night_start_hour: Mapped[int] = mapped_column(Integer, default=22)
     night_end_hour: Mapped[int] = mapped_column(Integer, default=6)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sync_version: Mapped[int] = mapped_column(Integer, default=1)
@@ -158,6 +162,7 @@ class UserModel(Base):
     full_name: Mapped[str] = mapped_column(String(120))
     role: Mapped[str] = mapped_column(String(20), default="OPERATOR")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -210,3 +215,33 @@ class DeviceModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     sync_version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class RoleModel(Base):
+    """Configurable role; users reference it by its unique name."""
+    __tablename__ = "roles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class PermissionModel(Base):
+    """A granular permission code, e.g. ``subscriber.manage``."""
+    __tablename__ = "permissions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+
+
+class RolePermissionModel(Base):
+    __tablename__ = "role_permissions"
+
+    role_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    permission_id: Mapped[str] = mapped_column(String(36), primary_key=True)

@@ -11,7 +11,6 @@ from datetime import date, datetime
 
 from pmql.application.ports.repositories import IFeeRuleRepository, ISubscriberRepository, IUserRepository
 from pmql.application.ports.security_port import IPasswordHasher
-from pmql.application.security import VALID_ROLES
 from pmql.domain.entities.fee_rule import FeeRule
 from pmql.domain.exceptions import FeeRuleNotFoundError, InvalidFeeRuleError, InvalidRoleError, SubscriberNotFoundError, UserNotFoundError
 
@@ -106,7 +105,7 @@ class UserManagementUseCase:
         user = await self._repo.get_by_id(inp.user_id)
         if user is None:
             raise UserNotFoundError(inp.user_id)
-        if inp.role not in VALID_ROLES:
+        if not inp.role.strip():
             raise InvalidRoleError(inp.role)
         user.full_name, user.role, user.is_active = inp.full_name, inp.role, inp.is_active
         if inp.password:

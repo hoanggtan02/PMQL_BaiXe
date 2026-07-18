@@ -109,6 +109,9 @@ class ICardRepository(ABC):
     @abstractmethod
     async def list_by_subscriber(self, subscriber_id: str) -> list[Card]: ...
 
+    @abstractmethod
+    async def list_all(self) -> list[Card]: ...
+
 
 class IFeeRuleRepository(ABC):
     @abstractmethod

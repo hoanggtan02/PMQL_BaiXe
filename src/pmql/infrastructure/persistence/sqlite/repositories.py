@@ -220,10 +220,10 @@ class SQLiteLaneRepository:
 
     async def get_by_id(self, lane_id: str) -> Lane | None:
         row = await self._session.get(LaneModel, lane_id)
-        return _lane_to_entity(row) if row else None
+        return _lane_to_entity(row) if row and not row.is_deleted else None
 
     async def list_active(self) -> list[Lane]:
-        result = await self._session.execute(select(LaneModel).where(LaneModel.is_active.is_(True)))
+        result = await self._session.execute(select(LaneModel).where(LaneModel.is_active.is_(True), LaneModel.is_deleted.is_(False)))
         return [_lane_to_entity(r) for r in result.scalars().all()]
 
     async def create(self, lane: Lane) -> None:
@@ -312,13 +312,13 @@ class SQLiteCardRepository:
         self._session = session
 
     async def get_by_rfid_code(self, rfid_code: str) -> Card | None:
-        result = await self._session.execute(select(CardModel).where(CardModel.rfid_code == rfid_code))
+        result = await self._session.execute(select(CardModel).where(CardModel.rfid_code == rfid_code, CardModel.is_deleted.is_(False)))
         row = result.scalars().first()
         return _card_to_entity(row) if row else None
 
     async def get_by_id(self, card_id: str) -> Card | None:
         row = await self._session.get(CardModel, card_id)
-        return _card_to_entity(row) if row else None
+        return _card_to_entity(row) if row and not row.is_deleted else None
 
     async def create(self, card: Card) -> None:
         self._session.add(
@@ -349,7 +349,11 @@ class SQLiteCardRepository:
         await self._session.flush()
 
     async def list_by_subscriber(self, subscriber_id: str) -> list[Card]:
-        result = await self._session.execute(select(CardModel).where(CardModel.subscriber_id == subscriber_id))
+        result = await self._session.execute(select(CardModel).where(CardModel.subscriber_id == subscriber_id, CardModel.is_deleted.is_(False)))
+        return [_card_to_entity(r) for r in result.scalars().all()]
+
+    async def list_all(self) -> list[Card]:
+        result = await self._session.execute(select(CardModel).where(CardModel.is_deleted.is_(False)).order_by(CardModel.created_at.desc()))
         return [_card_to_entity(r) for r in result.scalars().all()]
 
 
@@ -359,13 +363,14 @@ class SQLiteSubscriberRepository:
 
     async def get_by_id(self, subscriber_id: str) -> Subscriber | None:
         row = await self._session.get(SubscriberModel, subscriber_id)
-        return _subscriber_to_entity(row) if row else None
+        return _subscriber_to_entity(row) if row and not row.is_deleted else None
 
     async def get_by_vehicle_type(self, vehicle_type: str, is_active: bool = True) -> list[Subscriber]:
         result = await self._session.execute(
             select(SubscriberModel).where(
                 SubscriberModel.vehicle_type == vehicle_type,
                 SubscriberModel.is_active.is_(is_active),
+                SubscriberModel.is_deleted.is_(False),
             )
         )
         return [_subscriber_to_entity(r) for r in result.scalars().all()]
@@ -406,12 +411,12 @@ class SQLiteSubscriberRepository:
 
     async def delete(self, subscriber_id: str) -> None:
         row = await self._session.get(SubscriberModel, subscriber_id)
-        if row is not None:
-            await self._session.delete(row)
+        if row is not None and not row.is_deleted:
+            row.is_deleted = True
             await self._session.flush()
 
     async def list_all(self) -> list[Subscriber]:
-        result = await self._session.execute(select(SubscriberModel))
+        result = await self._session.execute(select(SubscriberModel).where(SubscriberModel.is_deleted.is_(False)))
         return [_subscriber_to_entity(r) for r in result.scalars().all()]
 
 
@@ -424,6 +429,7 @@ class SQLiteFeeRuleRepository:
             select(FeeRuleModel).where(
                 FeeRuleModel.vehicle_type == vehicle_type,
                 FeeRuleModel.is_active.is_(True),
+                FeeRuleModel.is_deleted.is_(False),
             )
         )
         row = result.scalars().first()
@@ -431,7 +437,7 @@ class SQLiteFeeRuleRepository:
 
     async def get_by_id(self, rule_id: str) -> FeeRule | None:
         row = await self._session.get(FeeRuleModel, rule_id)
-        return _fee_rule_to_entity(row) if row else None
+        return _fee_rule_to_entity(row) if row and not row.is_deleted else None
 
     async def create(self, rule: FeeRule) -> None:
         self._session.add(
@@ -477,12 +483,12 @@ class SQLiteFeeRuleRepository:
         # "Chưa có") — callers could only soft-disable via update(is_active
         # =False). This performs a real hard delete for retiring a rule.
         row = await self._session.get(FeeRuleModel, rule_id)
-        if row is not None:
-            await self._session.delete(row)
+        if row is not None and not row.is_deleted:
+            row.is_deleted = True
             await self._session.flush()
 
     async def list_all(self) -> list[FeeRule]:
-        result = await self._session.execute(select(FeeRuleModel))
+        result = await self._session.execute(select(FeeRuleModel).where(FeeRuleModel.is_deleted.is_(False)))
         return [_fee_rule_to_entity(r) for r in result.scalars().all()]
 
 
@@ -582,9 +588,9 @@ class SQLiteUserRepository:
         self._session = session
 
     async def get_by_username(self, username: str) -> User | None:
-        result = await self._session.execute(select(UserModel).where(UserModel.username == username))
+        result = await self._session.execute(select(UserModel).where(UserModel.username == username, UserModel.is_deleted.is_(False)))
         row = result.scalars().first()
-        return _user_to_entity(row) if row else None
+        return _user_to_entity(row) if row and not row.is_deleted else None
 
     async def get_by_id(self, user_id: str) -> User | None:
         row = await self._session.get(UserModel, user_id)
@@ -623,12 +629,12 @@ class SQLiteUserRepository:
 
     async def delete(self, user_id: str) -> None:
         row = await self._session.get(UserModel, user_id)
-        if row is not None:
-            await self._session.delete(row)
+        if row is not None and not row.is_deleted:
+            row.is_deleted = True
             await self._session.flush()
 
     async def list_all(self) -> list[User]:
-        result = await self._session.execute(select(UserModel))
+        result = await self._session.execute(select(UserModel).where(UserModel.is_deleted.is_(False)))
         return [_user_to_entity(r) for r in result.scalars().all()]
 
 

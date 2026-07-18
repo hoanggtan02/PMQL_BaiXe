@@ -15,7 +15,6 @@ T = TypeVar("T")
 ROLE_OPERATOR = "OPERATOR"
 ROLE_SUPERVISOR = "SUPERVISOR"
 ROLE_ADMIN = "ADMIN"
-VALID_ROLES = frozenset({ROLE_OPERATOR, ROLE_SUPERVISOR, ROLE_ADMIN})
 
 
 @dataclass(frozen=True)
@@ -40,8 +39,8 @@ def require_roles(*allowed_roles: str) -> Callable[[Callable[P, Awaitable[T]]], 
     jobs while every UI/API action can be protected consistently.
     """
     allowed = frozenset(allowed_roles)
-    if not allowed <= VALID_ROLES:
-        raise ValueError("Unknown role in authorization policy")
+    if not allowed:
+        raise ValueError("Authorization policy must declare at least one role")
 
     def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @wraps(func)
