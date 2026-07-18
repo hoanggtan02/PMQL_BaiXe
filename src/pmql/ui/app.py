@@ -12,6 +12,7 @@ from pmql.application.use_cases.lane_ops.vehicle_exit_use_case import VehicleExi
 from pmql.application.use_cases.management_ops import FeeRuleInput, FeeRuleManagementUseCase, SubscriberManagementUseCase, SubscriberUpdateInput, UserManagementUseCase, UserUpdateInput
 from pmql.application.use_cases.subscriber_ops.register_subscriber_use_case import RegisterSubscriberInput, RegisterSubscriberUseCase
 from pmql.application.use_cases.shift_ops.open_shift_use_case import OpenShiftInput, OpenShiftUseCase
+from pmql.application.use_cases.shift_ops.close_shift_use_case import CloseShiftInput, CloseShiftUseCase
 from pmql.config import Settings
 from pmql.domain.entities.card import Card
 from pmql.domain.entities.lane import Lane
@@ -115,7 +116,7 @@ def launch(settings: Settings) -> int:
             root = QWidget(); root.setObjectName("root"); layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
             layout.addWidget(self.build_sidebar()); right = QWidget(); right_layout = QVBoxLayout(right); right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(0)
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
-            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": lambda: self.table_page("Phiên gửi xe", ["Biển số", "Trạng thái", "Vào lúc", "Ra lúc", "Phí"], _session_rows), "shifts": lambda: self.table_page("Ca làm việc", ["Nhân viên", "Bắt đầu", "Kết thúc", "Doanh thu", "Trạng thái"], _shift_rows), "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page}
+            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": lambda: self.table_page("Phiên gửi xe", ["Biển số", "Trạng thái", "Vào lúc", "Ra lúc", "Phí"], _session_rows), "shifts": self.shifts_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page}
             self.pages = {key: factory() for key, factory in self.page_factories.items()}
             for page in self.pages.values(): self.stack.addWidget(page)
             self.go("overview")
@@ -170,16 +171,221 @@ def launch(settings: Settings) -> int:
             box.addLayout(grid); panel = QFrame(); panel.setObjectName("panel"); inside = QVBoxLayout(panel); inside.addWidget(label("Xe đang trong bãi", bold=True)); self.live_table = self.make_table(["Biển số", "Trạng thái", "Thời điểm vào", "Làn vào"], 6); inside.addWidget(self.live_table); box.addWidget(panel, 1); return page
 
         def operations_page(self) -> QWidget:
-            page, box = self.page(); top = QHBoxLayout(); top.addWidget(label("Vận hành làn xe", bold=True)); top.addStretch(); self.shift_button = QPushButton("▶  Mở ca làm việc"); self.shift_button.setObjectName("success"); self.shift_button.clicked.connect(self.open_shift); top.addWidget(self.shift_button); box.addLayout(top)
-            self.operation_note = label("Chưa mở ca. Mở ca trước khi ghi nhận xe vào.", "muted"); box.addWidget(self.operation_note); grid = QGridLayout(); self.lane_plate = []
+            page, box = self.page(); box.setContentsMargins(12, 12, 12, 12); box.setSpacing(12)
+            
+            # --- Toolbar ---
+            toolbar = QHBoxLayout()
+            lane_filter = QComboBox(); lane_filter.addItem("— Tất cả làn —")
+            try:
+                for ln in asyncio.run(_lanes(settings)): lane_filter.addItem(ln.name)
+            except Exception: pass
+            toolbar.addWidget(lane_filter)
+            
+            self.shift_status_badge = label("Chưa mở ca", "badge"); self.shift_status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1;")
+            toolbar.addWidget(self.shift_status_badge); toolbar.addStretch()
+            
+            self.shift_button = QPushButton("▶ Mở ca"); self.shift_button.setObjectName("success"); self.shift_button.clicked.connect(self.open_shift)
+            toolbar.addWidget(self.shift_button)
+            
+            refresh_btn = QPushButton("↻"); refresh_btn.setFixedWidth(36)
+            toolbar.addWidget(refresh_btn)
+            box.addLayout(toolbar)
+            
+            # --- Sub-Toolbar ---
+            sub_toolbar = QHBoxLayout()
+            btn_operate = QPushButton("⚑ Vận hành"); btn_operate.setStyleSheet("background: #6366f1; color: white; border: 1px solid #4f46e5;")
+            btn_camera = QPushButton("📷 Xem camera")
+            btn_finance = QPushButton("📊 Thu/Chi")
+            sub_toolbar.addWidget(btn_operate); sub_toolbar.addWidget(btn_camera); sub_toolbar.addWidget(btn_finance); sub_toolbar.addStretch()
+            box.addLayout(sub_toolbar)
+            
+            # --- Metric Bar ---
+            metric_bar = QFrame(); metric_bar.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e1b4b, stop:1 #312e81); border-radius: 8px; padding: 10px;")
+            mb_layout = QHBoxLayout(metric_bar)
+            
+            def m_box(val, title, align_right=False):
+                w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(10, 0, 10, 0)
+                v = label(val); v.setStyleSheet("color: white; font-size: 20px; font-weight: bold;")
+                t = label(title); t.setStyleSheet("color: #a5b4fc; font-size: 10px; font-weight: bold;")
+                if align_right:
+                    v.setAlignment(Qt.AlignmentFlag.AlignRight); t.setAlignment(Qt.AlignmentFlag.AlignRight)
+                l.addWidget(v); l.addWidget(t)
+                return w, v
+            
+            w1, self.lbl_in_lot = m_box("0 xe", "XE TRONG BÃI")
+            w2, self.lbl_rev_today = m_box("0 đ", "DOANH THU HÔM NAY")
+            w3, self.lbl_rev_shift = m_box("0 đ", "DOANH THU CA NÀY")
+            w4, self.lbl_count_today = m_box("0 lượt", "LƯỢT XE HÔM NAY")
+            w5, self.lbl_start_cash = m_box("0 đ", "TIỀN ĐẦU CA", align_right=True)
+            
+            mb_layout.addWidget(w1); mb_layout.addWidget(w2); mb_layout.addWidget(w3); mb_layout.addWidget(w4); mb_layout.addStretch(); mb_layout.addWidget(w5)
+            box.addWidget(metric_bar)
+            
+            # --- Lane Grid ---
+            grid = QGridLayout(); grid.setSpacing(12); self.lane_plate = []
             try: lanes = asyncio.run(_lanes(settings))
             except Exception: lanes = []
             if not lanes: box.addWidget(label("Chưa có làn hoạt động. Hãy tạo làn trong Cấu hình làn.", "muted")); box.addStretch(); return page
+            
             for index, lane in enumerate(lanes):
                 name, direction = lane.name, {"IN": "VÀO", "OUT": "RA", "BIDIRECTIONAL": "2 CHIỀU"}.get(lane.direction, lane.direction)
-                card = QFrame(); card.setObjectName("card"); card_box = QVBoxLayout(card); row = QHBoxLayout(); row.addWidget(label(name, bold=True)); row.addStretch(); row.addWidget(label(direction, "badge", True)); card_box.addLayout(row); card_box.addWidget(label("Camera đang chờ kết nối", "muted")); plate = label("—", "metricValue", True); plate.setAlignment(Qt.AlignmentFlag.AlignCenter); plate.setStyleSheet("background:#fff6db;border:1px solid #ffc34d;border-radius:8px;padding:13px;color:#8a4b00;"); card_box.addWidget(plate); self.lane_plate.append(plate)
-                actions = QHBoxLayout(); enter = QPushButton("↪  Vào"); enter.setObjectName("success"); enter.clicked.connect(lambda _=False, lane_id=lane.id: self.record_entry(lane_id)); exit_button = QPushButton("↩  Ra"); exit_button.setObjectName("danger"); exit_button.clicked.connect(lambda _=False, lane_id=lane.id: self.record_exit(lane_id)); actions.addWidget(enter); actions.addWidget(exit_button); card_box.addLayout(actions); grid.addWidget(card, index // 2, index % 2)
+                card = QFrame(); card.setObjectName("card"); card_box = QVBoxLayout(card); card_box.setContentsMargins(10, 10, 10, 10)
+                
+                # Header
+                row = QHBoxLayout()
+                row.addWidget(label(name, bold=True))
+                badge = label(direction, "badge"); badge.setStyleSheet("background: #dcfce7; color: #166534;" if lane.direction == "IN" else "background: #fee2e2; color: #991b1b;")
+                row.addWidget(badge)
+                wait_badge = label("CHỜ XE", "badge"); wait_badge.setStyleSheet("background: #64748b; color: white;")
+                row.addWidget(wait_badge); row.addStretch()
+                count_badge = label("0 xe", "badge")
+                row.addWidget(count_badge)
+                card_box.addLayout(row)
+                
+                # Status & Plate
+                row2 = QHBoxLayout()
+                door = label("🚪"); door.setStyleSheet("font-size: 24px; color: #ef4444; border: 2px solid #ef4444; border-radius: 20px; padding: 4px;")
+                row2.addWidget(door)
+                vbox = QVBoxLayout(); vbox.addWidget(label("● Chờ xe", bold=True))
+                plate = label("—"); plate.setAlignment(Qt.AlignmentFlag.AlignCenter); plate.setStyleSheet("background:#fffbeb;border:2px solid #fcd34d;border-radius:4px;font-size:20px;font-weight:bold;color:#b45309;padding:4px;")
+                vbox.addWidget(plate); row2.addLayout(vbox)
+                card_box.addLayout(row2)
+                self.lane_plate.append(plate)
+                
+                # Camera box
+                cam_box = label("📷\nCamera đang chờ..."); cam_box.setAlignment(Qt.AlignmentFlag.AlignCenter); cam_box.setStyleSheet("background: #000000; color: #22c55e; border-radius: 6px; min-height: 120px; font-weight: bold;")
+                card_box.addWidget(cam_box)
+                
+                # Device Badges
+                row3 = QHBoxLayout()
+                for dev in ["Đầu đọc thẻ", "Camera", "Barrier", "Vân tay"]:
+                    b = label(dev); b.setStyleSheet("background: #dcfce7; color: #166534; border-radius: 8px; padding: 2px 6px; font-size: 9px; font-weight: bold;")
+                    row3.addWidget(b)
+                row3.addStretch()
+                card_box.addLayout(row3)
+                
+                # Inputs
+                row4 = QHBoxLayout()
+                uid = QLineEdit(); uid.setPlaceholderText("Mã thẻ (UID)"); row4.addWidget(uid)
+                pl = QLineEdit(); pl.setPlaceholderText("Biển số"); row4.addWidget(pl)
+                card_box.addLayout(row4)
+                
+                # Action Buttons
+                row5 = QHBoxLayout()
+                btn_in = QPushButton("→\nVào"); btn_in.setStyleSheet("background: #22c55e; color: white; border-radius: 4px; padding: 8px; font-weight: bold;"); btn_in.clicked.connect(lambda _=False, lane_id=lane.id: self.record_entry(lane_id))
+                btn_out = QPushButton("←\nRa"); btn_out.setStyleSheet("background: #ef4444; color: white; border-radius: 4px; padding: 8px; font-weight: bold;"); btn_out.clicked.connect(lambda _=False, lane_id=lane.id: self.record_exit(lane_id))
+                btn_issue = QPushButton("💳\nCấp thẻ"); btn_issue.setStyleSheet("background: #f97316; color: white; border-radius: 4px; padding: 8px; font-weight: bold;")
+                row5.addWidget(btn_in); row5.addWidget(btn_out); row5.addWidget(btn_issue)
+                card_box.addLayout(row5)
+                
+                # Secondary Buttons
+                row6 = QHBoxLayout()
+                btn_open = QPushButton("🔓 Mở tay"); btn_open.setStyleSheet("color: #059669; border: 1px solid #10b981;")
+                btn_close = QPushButton("🔒 Đóng"); btn_close.setStyleSheet("color: #475569; border: 1px solid #94a3b8;")
+                btn_cap = QPushButton("📷 Chụp"); btn_cap.setStyleSheet("color: #0284c7; border: 1px solid #38bdf8;")
+                row6.addWidget(btn_open); row6.addWidget(btn_close); row6.addWidget(btn_cap)
+                card_box.addLayout(row6)
+                
+                grid.addWidget(card, index // 3, index % 3)
+            
             box.addLayout(grid); box.addStretch(); return page
+
+        def shifts_page(self) -> QWidget:
+            page, box = self.page(); box.setContentsMargins(16, 16, 16, 16)
+            # Header
+            header = QHBoxLayout(); h = label("Quản lý ca làm việc", bold=True); h.setStyleSheet("font-size:24px;")
+            header.addWidget(h); header.addStretch()
+            btn_open = QPushButton("+ Mở ca mới"); btn_open.setObjectName("primary"); btn_open.clicked.connect(self.open_shift)
+            header.addWidget(btn_open); box.addLayout(header)
+            
+            # Active Shift Panel
+            panel = QFrame(); panel.setObjectName("panel"); panel.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e293b, stop:1 #334155); border-radius: 12px; padding: 16px;")
+            pbox = QVBoxLayout(panel)
+            pbox.addWidget(label("Ca Đang Hoạt Động", "badge", True))
+            pgrid = QGridLayout(); pgrid.setContentsMargins(0, 10, 0, 10)
+            
+            def p_box(val, title, col, is_money=False):
+                w = QWidget(); l = QVBoxLayout(w); l.setContentsMargins(0, 0, 0, 0)
+                v = label(val, bold=True); v.setStyleSheet(f"color: {'#10b981' if is_money else 'white'}; font-size: 20px;")
+                t = label(title); t.setStyleSheet("color: #94a3b8; font-size: 11px;")
+                l.addWidget(t); l.addWidget(v); pgrid.addWidget(w, 0, col)
+            
+            if self.shift_id:
+                try: stats = asyncio.run(_stats(settings, self.shift_id))
+                except Exception: stats = {"revenue": 0, "today_count": 0}
+                p_box("Ca đang mở", "LOẠI CA", 0)
+                p_box("Tất cả làn", "LÀN HOẠT ĐỘNG", 1)
+                p_box("Vừa xong", "GIỜ MỞ CA", 2)
+                p_box("0 đ", "SỐ TIỀN ĐẦU CA", 3, True)
+                p_box(f"{stats.get('revenue', 0):,} đ", "SỐ DƯ HIỆN TẠI", 4, True)
+                p_box(f"{stats.get('today_count', 0)}", "LƯỢT XE", 5)
+                p_box(f"{stats.get('revenue', 0):,} đ", "DOANH THU ƯỚC TÍNH", 6, True)
+            else:
+                pbox.addWidget(label("Không có ca nào đang mở.", "muted"))
+            
+            pbox.addLayout(pgrid)
+            btn_close = QPushButton("⏻ Đóng ca (Bàn giao)"); btn_close.setStyleSheet("background: #ef4444; color: white; border: 0; padding: 10px; font-weight: bold;")
+            btn_close.clicked.connect(self.close_shift)
+            if not self.shift_id: btn_close.setEnabled(False); btn_close.setStyleSheet("background: #475569; color: #94a3b8; border: 0;")
+            
+            pbox.addWidget(btn_close); box.addWidget(panel)
+            
+            # History
+            box.addWidget(label("Lịch sử ca làm việc", bold=True))
+            table = self.make_table(["Nhân viên", "Bắt đầu", "Kết thúc", "Doanh thu", "Trạng thái"]); box.addWidget(table, 1)
+            try: rows = asyncio.run(_shift_rows(settings))
+            except Exception: rows = []
+            table.setRowCount(len(rows))
+            for r, values in enumerate(rows):
+                for c, value in enumerate(values): table.setItem(r, c, QTableWidgetItem(str(value)))
+            
+            return page
+
+        def close_shift(self) -> None:
+            if not self.shift_id: return
+            dialog, content, footer = modal_shell(self, "Tính toán & Đóng ca", 600)
+            
+            grid = QGridLayout()
+            grid.addWidget(label("Tổng tiền mặt thực tế", "muted"), 0, 0)
+            actual_cash = QLineEdit(); actual_cash.setPlaceholderText("0 đ"); grid.addWidget(actual_cash, 1, 0)
+            
+            grid.addWidget(label("Ghi chú đóng ca", "muted"), 2, 0)
+            note = QLineEdit(); note.setPlaceholderText("Ghi chú (bàn giao ca, chênh lệch...)"); grid.addWidget(note, 3, 0)
+            content.addLayout(grid)
+            
+            try: stats = asyncio.run(_stats(settings, self.shift_id))
+            except Exception: stats = {"revenue": 0}
+            
+            summary = QFrame(); summary.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;")
+            sv = QVBoxLayout(summary)
+            row1 = QHBoxLayout(); row1.addWidget(label("Tiền đầu ca", "muted")); row1.addStretch(); row1.addWidget(label("0 đ", bold=True)); sv.addLayout(row1)
+            row2 = QHBoxLayout(); row2.addWidget(label("Doanh thu hệ thống", "muted")); row2.addStretch(); row2.addWidget(label(f"{stats.get('revenue', 0):,} đ", bold=True)); sv.addLayout(row2)
+            row3 = QHBoxLayout(); row3.addWidget(label("Tổng tiền dự kiến", "muted")); row3.addStretch(); row3.addWidget(label(f"{stats.get('revenue', 0):,} đ", bold=True)); sv.addLayout(row3)
+            row4 = QHBoxLayout(); row4.addWidget(label("Chênh lệch", "muted")); row4.addStretch(); diff_lbl = label("0 đ", bold=True); diff_lbl.setStyleSheet("color: #ef4444;"); row4.addWidget(diff_lbl); sv.addLayout(row4)
+            content.addWidget(summary)
+            
+            def update_diff():
+                try: actual = int(actual_cash.text() or 0)
+                except ValueError: return
+                expected = stats.get('revenue', 0)
+                diff = actual - expected
+                diff_lbl.setText(f"{diff:,} đ")
+                diff_lbl.setStyleSheet("color: #10b981;" if diff >= 0 else "color: #ef4444;")
+            
+            actual_cash.textChanged.connect(update_diff)
+            
+            cancel, save = QPushButton("Hủy"), QPushButton("⏻ Đóng ca ngay"); save.setObjectName("danger"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def do_close():
+                try:
+                    actual = int(actual_cash.text() or 0)
+                    asyncio.run(_close_shift(settings, getattr(self.user, "user_id"), actual, note.text()))
+                except Exception as exc: QMessageBox.warning(dialog, "Lỗi", str(exc)); return
+                self.shift_id = None
+                self.shift_status_badge.setText("Chưa mở ca"); self.shift_status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1;")
+                self.shift_button.setText("▶ Mở ca")
+                self.reload_page("shifts")
+                dialog.accept()
+            save.clicked.connect(do_close); dialog.exec()
 
         def make_table(self, headers: list[str], minimum_rows: int = 10) -> QTableWidget:
             table = QTableWidget(0, len(headers)); table.setHorizontalHeaderLabels(headers); table.setAlternatingRowColors(True); table.setShowGrid(False); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); table.setMinimumHeight(max(220, minimum_rows * 38)); return table
@@ -553,9 +759,27 @@ def launch(settings: Settings) -> int:
             type_cb.currentTextChanged.connect(type_changed); update_summary()
             cancel, save = QPushButton("Hủy"), QPushButton("▶ Mở ca ngay"); save.setObjectName("success"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
             def do_open():
-                try: self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id")))
+                # Extract cash input
+                cash_text = cash_cb.currentText()
+                start_cash = 0
+                if "500.000" in cash_text: start_cash = 500000
+                elif "1.000.000" in cash_text: start_cash = 1000000
+                elif "2.000.000" in cash_text: start_cash = 2000000
+                elif "5.000.000" in cash_text: start_cash = 5000000
+                
+                # Extract lane
+                lane_txt = lane_cb.currentText()
+                lane_id = next((l.id for l in lanes if l.name == lane_txt), None)
+                
+                # Extract notes
+                note_txt = note_cb.currentText() if "Không có" not in note_cb.currentText() else ""
+                
+                try:
+                    self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id"), lane_id, self.selected_preset[0], start_cash, note_txt))
                 except Exception as exc: QMessageBox.warning(dialog, "Không thể mở ca", str(exc)); return
-                self.operation_note.setText("● Ca đang mở — các phiên xe vào sẽ được tính vào ca này."); self.shift_button.setText("✓ Ca đang hoạt động"); self.refresh_live(); dialog.accept()
+                self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;")
+                self.shift_button.setText("✓ Ca đang hoạt động")
+                self.refresh_live(); dialog.accept()
             save.clicked.connect(do_open); dialog.exec()
 
         def record_entry(self, lane_id: str) -> None:
@@ -599,10 +823,17 @@ async def _authenticate(settings: Settings, username: str, password: str):
         async with db.session() as session: return await LoginUseCase(SQLiteUserRepository(session), PBKDF2PasswordHasher(), JwtTokenService(settings.secret_key, settings.access_token_expire_minutes)).execute(LoginInput(username, password))
     finally: await db.dispose()
 
-async def _open_shift(settings: Settings, user_id: str) -> str:
+async def _open_shift(settings: Settings, user_id: str, lane_id: str | None, shift_type: str, starting_cash: int, notes: str | None) -> str:
     db = Database(settings.local_database_url)
     try:
-        async with db.session() as session: return (await OpenShiftUseCase(SQLiteShiftRepository(session)).execute(OpenShiftInput(settings.branch_id, user_id))).shift_id
+        async with db.session() as session: return (await OpenShiftUseCase(SQLiteShiftRepository(session)).execute(OpenShiftInput(settings.branch_id, user_id, lane_id, shift_type, starting_cash, notes))).shift_id
+    finally: await db.dispose()
+
+async def _close_shift(settings: Settings, user_id: str, actual_ending_cash: int | None, closing_notes: str | None):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            return await CloseShiftUseCase(SQLiteShiftRepository(session), SQLiteSessionRepository(session)).execute(CloseShiftInput(user_id, actual_ending_cash, closing_notes))
     finally: await db.dispose()
 
 async def _entry(settings: Settings, lane_id: str, plate: str, vehicle: str, shift_id: str) -> str:

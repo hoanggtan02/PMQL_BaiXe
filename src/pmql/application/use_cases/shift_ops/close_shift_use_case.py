@@ -15,6 +15,8 @@ log = structlog.get_logger(__name__)
 @dataclass
 class CloseShiftInput:
     operator_id: str
+    actual_ending_cash: int | None = None
+    closing_notes: str | None = None
 
 
 @dataclass
@@ -22,6 +24,7 @@ class CloseShiftOutput:
     shift_id: str
     total_sessions: int
     total_revenue: int
+    discrepancy: int = 0
 
 
 class CloseShiftUseCase:
@@ -46,8 +49,24 @@ class CloseShiftUseCase:
         total_sessions = len(sessions)
         total_revenue = sum(s.fee_amount for s in sessions)
 
-        shift.close(end_time=datetime.utcnow(), total_sessions=total_sessions, total_revenue=total_revenue)
+        shift.close(
+            end_time=datetime.utcnow(), 
+            total_sessions=total_sessions, 
+            total_revenue=total_revenue,
+            actual_ending_cash=inp.actual_ending_cash,
+            closing_notes=inp.closing_notes
+        )
         await self._shifts.update(shift)
 
-        log.info("shift.closed", shift_id=shift.id, total_sessions=total_sessions, total_revenue=total_revenue)
-        return CloseShiftOutput(shift_id=shift.id, total_sessions=total_sessions, total_revenue=total_revenue)
+        discrepancy = 0
+        if inp.actual_ending_cash is not None:
+            expected_cash = shift.starting_cash + total_revenue
+            discrepancy = inp.actual_ending_cash - expected_cash
+
+        log.info("shift.closed", shift_id=shift.id, total_sessions=total_sessions, total_revenue=total_revenue, discrepancy=discrepancy)
+        return CloseShiftOutput(
+            shift_id=shift.id, 
+            total_sessions=total_sessions, 
+            total_revenue=total_revenue,
+            discrepancy=discrepancy
+        )

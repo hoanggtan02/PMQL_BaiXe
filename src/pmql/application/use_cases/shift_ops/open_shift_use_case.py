@@ -16,6 +16,10 @@ log = structlog.get_logger(__name__)
 class OpenShiftInput:
     branch_id: str
     operator_id: str
+    lane_id: str | None = None
+    shift_type: str = ""
+    starting_cash: int = 0
+    notes: str | None = None
 
 
 @dataclass
@@ -35,7 +39,15 @@ class OpenShiftUseCase:
         if existing is not None:
             raise ShiftAlreadyOpenError(inp.operator_id)
 
-        shift = Shift(branch_id=inp.branch_id, operator_id=inp.operator_id, status="OPEN")
+        shift = Shift(
+            branch_id=inp.branch_id, 
+            operator_id=inp.operator_id, 
+            lane_id=inp.lane_id,
+            shift_type=inp.shift_type,
+            starting_cash=inp.starting_cash,
+            notes=inp.notes,
+            status="OPEN"
+        )
         await self._shifts.create(shift)
 
         log.info("shift.opened", shift_id=shift.id, operator_id=inp.operator_id)
