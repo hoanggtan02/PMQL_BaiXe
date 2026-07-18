@@ -26,14 +26,20 @@ class Database:
                     columns = (await conn.execute(text(f"PRAGMA table_info({table})"))).mappings().all()
                     if columns and "is_deleted" not in {column["name"] for column in columns}:
                         await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
-                shift_cols = (await conn.execute(text("PRAGMA table_info(shifts)"))).mappings().all()
-                if shift_cols and "lane_id" not in {col["name"] for col in shift_cols}:
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN lane_id VARCHAR(36)"))
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN shift_type VARCHAR(50) DEFAULT ''"))
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN starting_cash INTEGER DEFAULT 0"))
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN notes TEXT"))
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN actual_ending_cash INTEGER"))
-                    await conn.execute(text("ALTER TABLE shifts ADD COLUMN closing_notes TEXT"))
+                # Shift columns migration
+                shift_columns = (await conn.execute(text("PRAGMA table_info(shifts)"))).mappings().all()
+                if shift_columns:
+                    col_names = {column["name"] for column in shift_columns}
+                    if "lane_id" not in col_names:
+                        await conn.execute(text("ALTER TABLE shifts ADD COLUMN lane_id VARCHAR(36) NULL"))
+                    if "note" not in col_names:
+                        await conn.execute(text("ALTER TABLE shifts ADD COLUMN note VARCHAR(255) NOT NULL DEFAULT ''"))
+                    if "opening_cash" not in col_names:
+                        await conn.execute(text("ALTER TABLE shifts ADD COLUMN opening_cash INTEGER NOT NULL DEFAULT 0"))
+                    if "closing_cash" not in col_names:
+                        await conn.execute(text("ALTER TABLE shifts ADD COLUMN closing_cash INTEGER NOT NULL DEFAULT 0"))
+                    if "close_note" not in col_names:
+                        await conn.execute(text("ALTER TABLE shifts ADD COLUMN close_note VARCHAR(255) NOT NULL DEFAULT ''"))
             await conn.run_sync(Base.metadata.create_all)
 
     @asynccontextmanager

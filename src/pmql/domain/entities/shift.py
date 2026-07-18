@@ -11,26 +11,25 @@ class Shift:
     branch_id: str = ""
     operator_id: str = ""
     lane_id: str | None = None
-    shift_type: str = ""
-    starting_cash: int = 0
-    notes: str | None = None
+    note: str = ""
+    opening_cash: int = 0
     start_time: datetime = field(default_factory=datetime.utcnow)
     end_time: datetime | None = None
     total_sessions: int = 0
     total_revenue: int = 0
-    actual_ending_cash: int | None = None
-    closing_notes: str | None = None
+    closing_cash: int = 0
+    close_note: str = ""
     status: str = "OPEN"
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
     sync_version: int = 1
 
-    def close(self, end_time: datetime, total_sessions: int, total_revenue: int, actual_ending_cash: int | None = None, closing_notes: str | None = None) -> None:
+    def close(self, end_time: datetime, total_sessions: int, total_revenue: int, closing_cash: int = 0, close_note: str = "") -> None:
         self.end_time = end_time
         self.total_sessions = total_sessions
         self.total_revenue = total_revenue
-        self.actual_ending_cash = actual_ending_cash
-        self.closing_notes = closing_notes
+        self.closing_cash = closing_cash
+        self.close_note = close_note
         self.status = "CLOSED"
         self.updated_at = datetime.utcnow()
         self.sync_version += 1

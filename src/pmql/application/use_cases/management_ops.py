@@ -9,10 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from pmql.application.ports.repositories import IFeeRuleRepository, ISubscriberRepository, IUserRepository
+from pmql.application.ports.repositories import IFeeRuleRepository, ISubscriberRepository, IUserRepository, IShiftRepository
 from pmql.application.ports.security_port import IPasswordHasher
 from pmql.domain.entities.fee_rule import FeeRule
-from pmql.domain.exceptions import FeeRuleNotFoundError, InvalidFeeRuleError, InvalidRoleError, SubscriberNotFoundError, UserNotFoundError
+from pmql.domain.exceptions import FeeRuleNotFoundError, InvalidFeeRuleError, InvalidRoleError, SubscriberNotFoundError, UserNotFoundError, ShiftNotFoundError
+from pmql.domain.entities.shift import Shift
 
 
 @dataclass
@@ -117,3 +118,39 @@ class UserManagementUseCase:
         if await self._repo.get_by_id(user_id) is None:
             raise UserNotFoundError(user_id)
         await self._repo.delete(user_id)
+
+
+@dataclass
+class ShiftInput:
+    branch_id: str
+    operator_id: str
+    start_time: datetime
+    end_time: datetime | None = None
+    total_sessions: int = 0
+    total_revenue: int = 0
+    status: str = "OPEN"
+
+
+class ShiftManagementUseCase:
+    def __init__(self, repo: IShiftRepository) -> None:
+        self._repo = repo
+
+    async def create(self, inp: ShiftInput) -> str:
+        shift = Shift(**inp.__dict__)
+        await self._repo.create(shift)
+        return shift.id
+
+    async def update(self, shift_id: str, inp: ShiftInput) -> None:
+        shift = await self._repo.get_by_id(shift_id)
+        if shift is None:
+            raise ShiftNotFoundError(shift_id)
+        for field, value in inp.__dict__.items():
+            if field != "branch_id":
+                setattr(shift, field, value)
+        shift.updated_at, shift.sync_version = datetime.utcnow(), shift.sync_version + 1
+        await self._repo.update(shift)
+
+    async def delete(self, shift_id: str) -> None:
+        if await self._repo.get_by_id(shift_id) is None:
+            raise ShiftNotFoundError(shift_id)
+        await self._repo.delete(shift_id)
