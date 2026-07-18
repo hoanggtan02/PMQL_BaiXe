@@ -467,40 +467,188 @@ def launch(settings: Settings) -> int:
             except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
 
         def lane_page(self) -> QWidget:
-            page, box = self.page(); row = QHBoxLayout(); title = label("Cấu hình làn xe", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm làn"); add.setObjectName("primary"); add.clicked.connect(self.add_lane); row.addWidget(add); box.addLayout(row)
-            self.lane_table = self.make_table(["Tên làn", "Hướng", "Camera", "RFID", "Barrier", "Trạng thái", "Thao tác"]); box.addWidget(self.lane_table, 1); self.load_lanes(); return page
+            page, box = self.page(); box.setContentsMargins(16, 16, 16, 16)
+            
+            # Header
+            header = QHBoxLayout()
+            history_btn = QPushButton("↺ Lịch sử thay đổi"); history_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; color: #64748b; border-radius: 6px; padding: 6px 12px;")
+            header.addWidget(history_btn)
+            
+            # Count label updated later
+            self.lane_count_lbl = label("| 0 làn đang cấu hình", "muted")
+            header.addWidget(self.lane_count_lbl)
+            header.addStretch()
+            
+            add = QPushButton("+ Thêm làn xe"); add.setObjectName("primary")
+            add.setStyleSheet("background: #f97316; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
+            add.clicked.connect(self.add_lane)
+            header.addWidget(add)
+            box.addLayout(header)
+            
+            # Scroll Area for Grid
+            scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setStyleSheet("background: transparent;")
+            self.lane_container = QWidget()
+            self.lane_grid = QGridLayout(self.lane_container)
+            self.lane_grid.setSpacing(16)
+            self.lane_grid.setAlignment(Qt.AlignmentFlag.AlignTop)
+            scroll.setWidget(self.lane_container)
+            box.addWidget(scroll, 1)
+            
+            self.load_lanes()
+            return page
 
         def load_lanes(self) -> None:
+            if not hasattr(self, "lane_grid"): return
+            
+            # Clear grid
+            while self.lane_grid.count():
+                item = self.lane_grid.takeAt(0)
+                if item.widget(): item.widget().deleteLater()
+            
             try: lanes = asyncio.run(_lanes(settings))
             except Exception: return
-            self.lane_table.setRowCount(len(lanes))
-            for r, lane in enumerate(lanes):
-                for c, value in enumerate((lane.name, lane.direction, lane.camera_source or "—", lane.rfid_device_id or "—", lane.barrier_device_id or "—", "Hoạt động" if lane.is_active else "Tắt")): self.lane_table.setItem(r, c, QTableWidgetItem(str(value)))
-                actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
-                edit, remove = QPushButton("✎ Sửa"), QPushButton("Xóa"); remove.setObjectName("danger")
-                edit.clicked.connect(lambda _=False, item=lane: self.edit_lane(item)); remove.clicked.connect(lambda _=False, item=lane: self.delete_lane(item))
-                action_row.addWidget(edit); action_row.addWidget(remove); self.lane_table.setCellWidget(r, 6, actions)
+            
+            self.lane_count_lbl.setText(f"| {len(lanes)} làn đang cấu hình")
+            
+            for index, lane in enumerate(lanes):
+                card = QFrame(); card.setObjectName("card")
+                card.setStyleSheet("QFrame#card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
+                cbox = QVBoxLayout(card); cbox.setContentsMargins(20, 20, 20, 20)
+                
+                # Header: Name + Car count
+                header = QHBoxLayout()
+                header.addWidget(label(lane.name, bold=True, style="font-size: 16px;"))
+                header.addStretch()
+                
+                count_lbl = label("0", bold=True, style="color: #f59e0b; font-size: 18px;")
+                txt_lbl = label("Xe đang gửi", "muted", style="font-size: 10px;")
+                vbox = QVBoxLayout(); vbox.setSpacing(0); vbox.addWidget(count_lbl, 0, Qt.AlignmentFlag.AlignHCenter); vbox.addWidget(txt_lbl, 0, Qt.AlignmentFlag.AlignHCenter)
+                header.addLayout(vbox)
+                cbox.addLayout(header)
+                
+                # Tags: Direction + Status
+                tag_row = QHBoxLayout()
+                if lane.direction == "IN": 
+                    dir_lbl = label("↗ Xe vào", style="background: #dcfce7; color: #16a34a; border-radius: 12px; padding: 4px 10px; font-size: 11px;")
+                elif lane.direction == "OUT":
+                    dir_lbl = label("↙ Xe ra", style="background: #fee2e2; color: #dc2626; border-radius: 12px; padding: 4px 10px; font-size: 11px;")
+                else:
+                    dir_lbl = label("↔ Hai chiều", style="background: #e0e7ff; color: #4f46e5; border-radius: 12px; padding: 4px 10px; font-size: 11px;")
+                
+                status_lbl = label("● Hoạt động" if lane.is_active else "○ Tắt", style="background: #dcfce7; color: #16a34a; border-radius: 12px; padding: 4px 10px; font-size: 11px;")
+                if not lane.is_active: status_lbl.setStyleSheet("background: #f1f5f9; color: #64748b; border-radius: 12px; padding: 4px 10px; font-size: 11px;")
+                
+                tag_row.addWidget(dir_lbl); tag_row.addWidget(status_lbl); tag_row.addStretch()
+                cbox.addLayout(tag_row)
+                
+                cbox.addSpacing(15)
+                cbox.addWidget(label("THIẾT BỊ LẮP ĐẶT", "muted", style="font-size: 11px; font-weight: bold;"))
+                
+                # Devices
+                dev_row = QHBoxLayout()
+                dev_style = "background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px 8px; font-size: 11px;"
+                if lane.rfid_device_id: dev_row.addWidget(label("💳 Đầu đọc thẻ", style=dev_style))
+                if lane.camera_source: dev_row.addWidget(label("📷 Camera", style=dev_style))
+                if lane.barrier_device_id: dev_row.addWidget(label("🚧 Barrier", style=dev_style))
+                # Assuming finger print is not in our data model but we can show it grayed out if missing, or just not show
+                dev_row.addStretch()
+                cbox.addLayout(dev_row)
+                
+                cbox.addSpacing(15)
+                cbox.addWidget(label("Trạng thái hoạt động: <b>Chờ xe</b>", style="color: #64748b; font-size: 12px;"))
+                cbox.addSpacing(10)
+                
+                # Actions
+                actions = QHBoxLayout()
+                edit = QPushButton("📝 Sửa cấu hình")
+                edit.setStyleSheet("background: white; border: 1px solid #93c5fd; color: #2563eb; border-radius: 6px; padding: 8px; font-weight: bold;")
+                edit.clicked.connect(lambda _=False, item=lane: self.edit_lane(item))
+                
+                remove = QPushButton("🗑")
+                remove.setStyleSheet("background: white; border: 1px solid #fca5a5; color: #dc2626; border-radius: 6px; padding: 8px 14px;")
+                remove.clicked.connect(lambda _=False, item=lane: self.delete_lane(item))
+                
+                actions.addWidget(edit, 1)
+                actions.addWidget(remove)
+                cbox.addLayout(actions)
+                
+                self.lane_grid.addWidget(card, index // 2, index % 2)
+
+        def show_lane_modal(self, lane=None):
+            dialog = QDialog(self); dialog.setWindowTitle("Thêm làn xe mới" if not lane else "Sửa làn xe"); dialog.setFixedSize(500, 400)
+            dialog.setStyleSheet("QDialog { background: white; border-radius: 12px; } QLineEdit, QComboBox { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }")
+            box = QVBoxLayout(dialog); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(0)
+            
+            # Header
+            header = QFrame(); header.setStyleSheet("background: #f97316; border-top-left-radius: 12px; border-top-right-radius: 12px;")
+            hbox = QHBoxLayout(header); hbox.setContentsMargins(20, 15, 20, 15)
+            title = label("+ Thêm làn xe mới" if not lane else "📝 Sửa làn xe", bold=True); title.setStyleSheet("color: white; font-size: 18px;")
+            hbox.addWidget(title); hbox.addStretch()
+            close_btn = QPushButton("✕"); close_btn.setStyleSheet("color: white; font-size: 18px; border: none; background: transparent;")
+            close_btn.clicked.connect(dialog.reject); hbox.addWidget(close_btn)
+            box.addWidget(header)
+            
+            # Body
+            body = QWidget(); vbox = QVBoxLayout(body); vbox.setContentsMargins(20, 20, 20, 20); vbox.setSpacing(15)
+            
+            # Name
+            vbox.addWidget(label("Tên làn *", style="font-weight: bold; font-size: 12px; color: #475569;"))
+            name = QLineEdit(lane.name if lane else ""); name.setPlaceholderText("VD: Làn vào 1, Làn ra A...")
+            vbox.addWidget(name)
+            vbox.addWidget(label("Tên hiển thị trên màn hình vận hành", "muted", style="font-size: 11px; margin-top: -10px;"))
+            
+            # Direction and Status in one row
+            row = QHBoxLayout()
+            col1 = QVBoxLayout(); col1.addWidget(label("Chiều xe", style="font-weight: bold; font-size: 12px; color: #475569;"))
+            direction = QComboBox(); direction.addItems(["Xe vào (IN)", "Xe ra (OUT)", "Hai chiều (BOTH)"])
+            
+            # Map values to combo box indices
+            dir_map = {"IN": 0, "OUT": 1, "BIDIRECTIONAL": 2}
+            rev_dir_map = {0: "IN", 1: "OUT", 2: "BIDIRECTIONAL"}
+            if lane: direction.setCurrentIndex(dir_map.get(lane.direction, 0))
+            col1.addWidget(direction); row.addLayout(col1)
+            
+            col2 = QVBoxLayout(); col2.addWidget(label("Trạng thái", style="font-weight: bold; font-size: 12px; color: #475569;"))
+            status = QComboBox(); status.addItems(["Hoạt động", "Tắt"])
+            if lane and not lane.is_active: status.setCurrentIndex(1)
+            col2.addWidget(status); row.addLayout(col2)
+            
+            vbox.addLayout(row)
+            
+            # Placeholder for devices (simplified for this modal based on screenshot)
+            # The screenshot modal doesn't show the devices inputs, so we use defaults or keep existing if edit
+            camera = lane.camera_source if lane else "cam1"
+            rfid = lane.rfid_device_id if lane else "rfid1"
+            barrier = lane.barrier_device_id if lane else "bar1"
+            
+            box.addWidget(body); box.addStretch()
+            
+            # Footer
+            footer = QHBoxLayout(); footer.setContentsMargins(20, 10, 20, 20)
+            footer.addStretch()
+            cancel = QPushButton("Hủy"); cancel.setStyleSheet("background: #94a3b8; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
+            save = QPushButton("💾 Lưu cấu hình"); save.setStyleSheet("background: #f97316; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
+            cancel.clicked.connect(dialog.reject); footer.addWidget(cancel); footer.addWidget(save)
+            box.addLayout(footer)
+            
+            def do_save():
+                try:
+                    is_active = (status.currentIndex() == 0)
+                    selected_dir = rev_dir_map[direction.currentIndex()]
+                    if lane:
+                        asyncio.run(_update_lane(settings, lane.id, name.text(), selected_dir, camera, rfid, barrier, is_active))
+                    else:
+                        asyncio.run(_create_lane(settings, name.text(), selected_dir, camera, rfid, barrier))
+                    self.load_lanes(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Lỗi", str(exc))
+            save.clicked.connect(do_save); dialog.exec()
 
         def add_lane(self) -> None:
-            dialog, content, footer = modal_shell(self, "Thêm làn xe", 560); form = QFormLayout(); content.addLayout(form); name, direction, camera, rfid, barrier = QLineEdit(), QComboBox(), QLineEdit(), QLineEdit(), QLineEdit(); direction.addItems(["IN", "OUT", "BIDIRECTIONAL"])
-            form.addRow("Tên làn *", name); form.addRow("Hướng", direction); form.addRow("Nguồn camera", camera); form.addRow("Thiết bị RFID", rfid); form.addRow("Thiết bị barrier", barrier); cancel, save = QPushButton("Hủy"), QPushButton("Lưu làn"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
-            def save_lane() -> None:
-                try: asyncio.run(_create_lane(settings, name.text(), direction.currentText(), camera.text() or None, rfid.text() or None, barrier.text() or None)); self.load_lanes(); dialog.accept()
-                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
-            save.clicked.connect(save_lane); dialog.exec()
+            self.show_lane_modal()
 
         def edit_lane(self, lane) -> None:
-            dialog, content, footer = modal_shell(self, "Cấu hình làn xe", 560); form = QFormLayout(); content.addLayout(form)
-            name, direction, camera, rfid, barrier = QLineEdit(lane.name), QComboBox(), QLineEdit(lane.camera_source or ""), QLineEdit(lane.rfid_device_id or ""), QLineEdit(lane.barrier_device_id or "")
-            direction.addItems(["IN", "OUT", "BIDIRECTIONAL"]); direction.setCurrentText(lane.direction)
-            form.addRow("Tên làn *", name); form.addRow("Hướng", direction); form.addRow("Nguồn camera", camera); form.addRow("Thiết bị RFID", rfid); form.addRow("Thiết bị barrier", barrier)
-            cancel, save = QPushButton("Hủy"), QPushButton("Lưu cấu hình"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
-            def save_lane() -> None:
-                try:
-                    asyncio.run(_update_lane(settings, lane.id, name.text(), direction.currentText(), camera.text() or None, rfid.text() or None, barrier.text() or None, lane.is_active))
-                    self.load_lanes(); dialog.accept()
-                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
-            save.clicked.connect(save_lane); dialog.exec()
+            self.show_lane_modal(lane)
 
         def delete_lane(self, lane) -> None:
             if QMessageBox.question(self, "Xóa làn", f"Xóa mềm làn '{lane.name}'?") != QMessageBox.StandardButton.Yes: return
