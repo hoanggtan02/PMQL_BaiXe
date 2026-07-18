@@ -17,9 +17,8 @@ class OpenShiftInput:
     branch_id: str
     operator_id: str
     lane_id: str | None = None
-    shift_type: str = ""
-    starting_cash: int = 0
-    notes: str | None = None
+    note: str = ""
+    opening_cash: int = 0
 
 
 @dataclass
@@ -41,11 +40,10 @@ class OpenShiftUseCase:
 
         shift = Shift(
             branch_id=inp.branch_id, 
-            operator_id=inp.operator_id, 
+            operator_id=inp.operator_id,
             lane_id=inp.lane_id,
-            shift_type=inp.shift_type,
-            starting_cash=inp.starting_cash,
-            notes=inp.notes,
+            note=inp.note,
+            opening_cash=inp.opening_cash,
             status="OPEN"
         )
         await self._shifts.create(shift)

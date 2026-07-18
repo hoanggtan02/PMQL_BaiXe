@@ -167,15 +167,14 @@ def _shift_to_entity(row: ShiftModel) -> Shift:
         branch_id=row.branch_id,
         operator_id=row.operator_id,
         lane_id=row.lane_id,
-        shift_type=row.shift_type,
-        starting_cash=row.starting_cash,
-        notes=row.notes,
+        note=row.note,
+        opening_cash=row.opening_cash,
         start_time=row.start_time,
         end_time=row.end_time,
         total_sessions=row.total_sessions,
         total_revenue=row.total_revenue,
-        actual_ending_cash=row.actual_ending_cash,
-        closing_notes=row.closing_notes,
+        closing_cash=row.closing_cash,
+        close_note=row.close_note,
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -668,15 +667,14 @@ class SQLiteShiftRepository:
                 branch_id=shift.branch_id,
                 operator_id=shift.operator_id,
                 lane_id=shift.lane_id,
-                shift_type=shift.shift_type,
-                starting_cash=shift.starting_cash,
-                notes=shift.notes,
+                note=shift.note,
+                opening_cash=shift.opening_cash,
                 start_time=shift.start_time,
                 end_time=shift.end_time,
                 total_sessions=shift.total_sessions,
                 total_revenue=shift.total_revenue,
-                actual_ending_cash=shift.actual_ending_cash,
-                closing_notes=shift.closing_notes,
+                closing_cash=shift.closing_cash,
+                close_note=shift.close_note,
                 status=shift.status,
                 created_at=shift.created_at,
                 updated_at=shift.updated_at,
@@ -692,19 +690,34 @@ class SQLiteShiftRepository:
         row = result.scalars().first()
         return _shift_to_entity(row) if row else None
 
+    async def get_by_id(self, shift_id: str) -> Shift | None:
+        row = await self._session.get(ShiftModel, shift_id)
+        return _shift_to_entity(row) if row else None
+
     async def update(self, shift: Shift) -> None:
         row = await self._session.get(ShiftModel, shift.id)
         if row is None:
             raise ValueError(f"Shift {shift.id} not found")
+        row.operator_id = shift.operator_id
+        row.lane_id = shift.lane_id
+        row.note = shift.note
+        row.opening_cash = shift.opening_cash
+        row.start_time = shift.start_time
         row.end_time = shift.end_time
         row.total_sessions = shift.total_sessions
         row.total_revenue = shift.total_revenue
-        row.actual_ending_cash = shift.actual_ending_cash
-        row.closing_notes = shift.closing_notes
+        row.closing_cash = shift.closing_cash
+        row.close_note = shift.close_note
         row.status = shift.status
         row.updated_at = shift.updated_at
         row.sync_version = shift.sync_version
         await self._session.flush()
+
+    async def delete(self, shift_id: str) -> None:
+        row = await self._session.get(ShiftModel, shift_id)
+        if row:
+            await self._session.delete(row)
+            await self._session.flush()
 
     async def list_by_branch(self, branch_id: str, limit: int = 50) -> list[Shift]:
         result = await self._session.execute(
