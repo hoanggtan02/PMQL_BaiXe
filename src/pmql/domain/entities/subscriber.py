@@ -12,7 +12,8 @@ class Subscriber:
     full_name: str = ""
     phone: str = ""
     email: str | None = None
-    vehicle_type: str = ""
+    identity_card: str = ""
+    vehicle_type: str = ""  # Keep for backward compatibility or default type
     valid_from: date = field(default_factory=date.today)
     valid_until: date = field(default_factory=date.today)
     is_active: bool = True

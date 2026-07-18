@@ -9,9 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from pmql.application.ports.repositories import IFeeRuleRepository, ISubscriberRepository, IUserRepository, IShiftRepository
+from pmql.application.ports.repositories import IFeeRuleRepository, ISubscriberRepository, IUserRepository, IShiftRepository, IVehicleRepository
 from pmql.application.ports.security_port import IPasswordHasher
 from pmql.domain.entities.fee_rule import FeeRule
+from pmql.domain.entities.vehicle import Vehicle
 from pmql.domain.exceptions import FeeRuleNotFoundError, InvalidFeeRuleError, InvalidRoleError, SubscriberNotFoundError, UserNotFoundError, ShiftNotFoundError
 from pmql.domain.entities.shift import Shift
 
@@ -21,7 +22,8 @@ class SubscriberUpdateInput:
     subscriber_id: str
     full_name: str
     phone: str
-    vehicle_type: str
+    identity_card: str
+    vehicles: list[dict[str, str]]
     valid_from: date
     valid_until: date
     email: str | None = None
@@ -29,18 +31,34 @@ class SubscriberUpdateInput:
 
 
 class SubscriberManagementUseCase:
-    def __init__(self, repo: ISubscriberRepository) -> None:
+    def __init__(self, repo: ISubscriberRepository, vehicle_repo: IVehicleRepository) -> None:
         self._repo = repo
+        self._vehicles = vehicle_repo
 
     async def update(self, inp: SubscriberUpdateInput) -> None:
         subscriber = await self._repo.get_by_id(inp.subscriber_id)
         if subscriber is None:
             raise SubscriberNotFoundError(inp.subscriber_id)
-        subscriber.full_name, subscriber.phone, subscriber.vehicle_type = inp.full_name, inp.phone, inp.vehicle_type
+        subscriber.full_name, subscriber.phone = inp.full_name, inp.phone
+        subscriber.identity_card = inp.identity_card
         subscriber.valid_from, subscriber.valid_until = inp.valid_from, inp.valid_until
         subscriber.email, subscriber.is_active = inp.email, inp.is_active
         subscriber.updated_at, subscriber.sync_version = datetime.utcnow(), subscriber.sync_version + 1
         await self._repo.update(subscriber)
+
+        # Sync vehicles: remove old, add new
+        existing_vehicles = await self._vehicles.list_by_subscriber(inp.subscriber_id)
+        for v in existing_vehicles:
+            await self._vehicles.delete(v.id)
+
+        for v_data in inp.vehicles:
+            vehicle = Vehicle(
+                branch_id=subscriber.branch_id,
+                plate_number=v_data["plate_number"],
+                vehicle_type=v_data["vehicle_type"],
+                subscriber_id=subscriber.id
+            )
+            await self._vehicles.create(vehicle)
 
     async def delete(self, subscriber_id: str) -> None:
         if await self._repo.get_by_id(subscriber_id) is None:

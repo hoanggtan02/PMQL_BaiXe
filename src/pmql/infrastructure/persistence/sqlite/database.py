@@ -40,6 +40,22 @@ class Database:
                         await conn.execute(text("ALTER TABLE shifts ADD COLUMN closing_cash INTEGER NOT NULL DEFAULT 0"))
                     if "close_note" not in col_names:
                         await conn.execute(text("ALTER TABLE shifts ADD COLUMN close_note VARCHAR(255) NOT NULL DEFAULT ''"))
+                
+                # Subscriber columns migration
+                subscriber_columns = (await conn.execute(text("PRAGMA table_info(subscribers)"))).mappings().all()
+                if subscriber_columns:
+                    col_names = {column["name"] for column in subscriber_columns}
+                    if "identity_card" not in col_names:
+                        await conn.execute(text("ALTER TABLE subscribers ADD COLUMN identity_card VARCHAR(50) NOT NULL DEFAULT ''"))
+                
+                # Card columns migration
+                card_columns = (await conn.execute(text("PRAGMA table_info(cards)"))).mappings().all()
+                if card_columns:
+                    col_names = {column["name"] for column in card_columns}
+                    if "card_type" not in col_names:
+                        await conn.execute(text("ALTER TABLE cards ADD COLUMN card_type VARCHAR(20) NOT NULL DEFAULT 'GUEST'"))
+                    if "status" not in col_names:
+                        await conn.execute(text("ALTER TABLE cards ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE'"))
             await conn.run_sync(Base.metadata.create_all)
 
     @asynccontextmanager

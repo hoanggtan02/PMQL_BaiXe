@@ -317,6 +317,16 @@ class SQLiteVehicleRepository:
         row.sync_version = vehicle.sync_version
         await self._session.flush()
 
+    async def list_by_subscriber(self, subscriber_id: str) -> list[Vehicle]:
+        result = await self._session.execute(select(VehicleModel).where(VehicleModel.subscriber_id == subscriber_id))
+        return [_vehicle_to_entity(r) for r in result.scalars().all()]
+
+    async def delete(self, vehicle_id: str) -> None:
+        row = await self._session.get(VehicleModel, vehicle_id)
+        if row is not None:
+            await self._session.delete(row)
+            await self._session.flush()
+
 
 class SQLiteCardRepository:
     def __init__(self, session: AsyncSession) -> None:

@@ -842,50 +842,82 @@ def launch(settings: Settings) -> int:
 
         def subscriber_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thuê bao", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thuê bao"); add.setObjectName("primary"); add.clicked.connect(self.add_subscriber); row.addWidget(add); box.addLayout(row)
-            self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "Loại xe", "Hiệu lực đến", "Trạng thái", "Thao tác"]); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
+            self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "CMND/CCCD", "Phương tiện đăng ký", "Hiệu lực đến", "Trạng thái", "Thao tác"]); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
 
         def card_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thẻ RFID", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thẻ"); add.setObjectName("primary"); add.clicked.connect(self.add_card); row.addWidget(add); box.addLayout(row)
-            self.card_table = self.make_table(["Mã thẻ (UID)", "Thuê bao", "Xe", "Trạng thái", "Thao tác"]); box.addWidget(self.card_table, 1); self.load_cards(); return page
+            self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"]); box.addWidget(self.card_table, 1); self.load_cards(); return page
 
         def load_cards(self) -> None:
             if not hasattr(self, "card_table"): return
             try: cards = asyncio.run(_card_display_rows(settings))
             except Exception: return
             self.card_table.setRowCount(len(cards))
+            
+            STATUS_MAP = {"AVAILABLE": "Có sẵn", "IN_USE": "Đang dùng", "LOST": "Đã mất", "LOCKED": "Bị khóa"}
+            STATUS_COLOR = {"AVAILABLE": "#22c55e", "IN_USE": "#3b82f6", "LOST": "#f59e0b", "LOCKED": "#ef4444"}
+            
             for r, (card, subscriber_name) in enumerate(cards):
-                for c, value in enumerate((card.rfid_code, subscriber_name, "—", "Hoạt động" if card.is_active else "Đã khóa")): self.card_table.setItem(r, c, QTableWidgetItem(str(value)))
-                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("✎ Sửa"); toggle = QPushButton("Khóa" if card.is_active else "Mở"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, item=card: self.edit_card(item)); toggle.clicked.connect(lambda _=False, item=card: self.toggle_card(item)); remove.clicked.connect(lambda _=False, item=card: self.delete_card(item)); actions_row.addWidget(edit); actions_row.addWidget(toggle); actions_row.addWidget(remove); self.card_table.setCellWidget(r, 4, actions)
+                card_type_display = "Thuê bao" if card.card_type == "SUBSCRIBER" else "Vãng lai"
+                status_text = STATUS_MAP.get(card.status, card.status)
+                status_lbl = label(status_text, "badge", True); status_lbl.setStyleSheet(f"background: {STATUS_COLOR.get(card.status, '#ccc')}; color: white; padding: 4px; border-radius: 4px; font-weight: bold;")
+                
+                for c, value in enumerate((card.rfid_code, card_type_display, subscriber_name if card.card_type == "SUBSCRIBER" else "—")):
+                    self.card_table.setItem(r, c, QTableWidgetItem(str(value)))
+                self.card_table.setCellWidget(r, 3, status_lbl)
+                
+                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("✎ Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, item=card: self.edit_card(item)); remove.clicked.connect(lambda _=False, item=card: self.delete_card(item)); actions_row.addWidget(edit); actions_row.addWidget(remove); self.card_table.setCellWidget(r, 4, actions)
 
         def add_card(self) -> None:
-            dialog, content, footer = modal_shell(self, "Thêm thẻ RFID", 560); form = QFormLayout(); content.addLayout(form); uid, subscriber = QLineEdit(), QComboBox(); uid.setPlaceholderText("Quét hoặc nhập mã UID")
-            try:
-                for item in asyncio.run(_subscriber_entities(settings)): subscriber.addItem(f"{item.full_name} — {item.phone}", item.id)
-            except Exception: pass
-            form.addRow("Mã thẻ UID *", uid); form.addRow("Gán thuê bao", subscriber); cancel, save = QPushButton("Hủy"), QPushButton("Lưu thẻ"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
-            def save_card() -> None:
-                try: asyncio.run(_create_card(settings, uid.text(), subscriber.currentData())); self.load_cards(); dialog.accept()
-                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
-            save.clicked.connect(save_card); dialog.exec()
+            self.card_dialog()
 
         def edit_card(self, card) -> None:
-            dialog, content, footer = modal_shell(self, "Sửa thẻ RFID", 560); form = QFormLayout(); content.addLayout(form)
+            self.card_dialog(card)
+
+        def card_dialog(self, card=None) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm thẻ RFID" if not card else "Sửa thẻ RFID", 560)
+            form = QFormLayout(); content.addLayout(form)
+            
+            uid = QLineEdit(card.rfid_code if card else ""); uid.setPlaceholderText("Quét hoặc nhập mã UID")
+            if card: uid.setReadOnly(True)
+            
+            card_type = QComboBox(); card_type.addItem("Vãng lai", "GUEST"); card_type.addItem("Thuê bao", "SUBSCRIBER")
+            
             subscriber = QComboBox(); subscriber.addItem("Chưa gán thuê bao", None)
             try:
                 for item in asyncio.run(_subscriber_entities(settings)): subscriber.addItem(f"{item.full_name} — {item.phone}", item.id)
             except Exception: pass
-            subscriber.setCurrentIndex(max(0, subscriber.findData(card.subscriber_id)))
-            status = QComboBox(); status.addItem("Hoạt động", True); status.addItem("Đã khóa", False); status.setCurrentIndex(0 if card.is_active else 1)
-            form.addRow("Mã thẻ UID", label(card.rfid_code, bold=True)); form.addRow("Gán thuê bao", subscriber); form.addRow("Trạng thái", status)
-            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            
+            if card:
+                card_type.setCurrentIndex(max(0, card_type.findData(card.card_type)))
+                subscriber.setCurrentIndex(max(0, subscriber.findData(card.subscriber_id)))
+            
+            # Hide subscriber combo if card type is GUEST
+            def type_changed():
+                subscriber.setVisible(card_type.currentData() == "SUBSCRIBER")
+            card_type.currentIndexChanged.connect(type_changed); type_changed()
+            
+            status = QComboBox()
+            status.addItem("Có sẵn", "AVAILABLE"); status.addItem("Đang dùng", "IN_USE")
+            status.addItem("Đã mất", "LOST"); status.addItem("Bị khóa", "LOCKED")
+            if card: status.setCurrentIndex(max(0, status.findData(card.status)))
+            
+            form.addRow("Mã thẻ UID *", uid); form.addRow("Loại thẻ", card_type); form.addRow("Gán thuê bao", subscriber)
+            if card: form.addRow("Trạng thái", status)
+            
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thẻ" if not card else "Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            
             def save_card() -> None:
-                try: asyncio.run(_update_card(settings, card.id, subscriber.currentData(), bool(status.currentData()))); self.load_cards(); dialog.accept()
+                try:
+                    c_type, s_id = card_type.currentData(), subscriber.currentData()
+                    if c_type == "GUEST": s_id = None
+                    if card:
+                        asyncio.run(_update_card(settings, card.id, c_type, s_id, status.currentData()))
+                    else:
+                        asyncio.run(_create_card(settings, uid.text(), c_type, s_id))
+                    self.load_cards(); dialog.accept()
                 except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
             save.clicked.connect(save_card); dialog.exec()
-
-        def toggle_card(self, card) -> None:
-            try: asyncio.run(_set_card_active(settings, card.id, not card.is_active)); self.load_cards()
-            except Exception as exc: QMessageBox.warning(self, "Không cập nhật được", str(exc))
 
         def delete_card(self, card) -> None:
             if QMessageBox.question(self, "Xóa thẻ", f"Xóa mềm thẻ {card.rfid_code}?") != QMessageBox.StandardButton.Yes: return
@@ -1094,32 +1126,91 @@ def launch(settings: Settings) -> int:
         def load_subscribers(self) -> None:
             if not hasattr(self, "subscriber_table"): return
             try:
-                rows = asyncio.run(_subscriber_entities(settings))
+                data = asyncio.run(_subscriber_with_vehicles(settings))
                 vehicle_names = asyncio.run(_vehicle_name_map(settings))
             except Exception: return
-            self.subscriber_table.setRowCount(len(rows))
-            for r, item in enumerate(rows):
-                for c, value in enumerate((item.full_name, item.phone, vehicle_names.get(item.vehicle_type, item.vehicle_type), item.valid_until.isoformat(), "Hoạt động" if item.is_active else "Đã khóa")): self.subscriber_table.setItem(r, c, QTableWidgetItem(str(value)))
-                actions = QWidget(); row = QHBoxLayout(actions); row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, subscriber=item: self.edit_subscriber(subscriber)); remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber)); row.addWidget(edit); row.addWidget(remove); self.subscriber_table.setCellWidget(r, 5, actions)
+            self.subscriber_table.setRowCount(len(data))
+            for r, (item, vehicles) in enumerate(data):
+                vehicle_display = "\n".join([f"• {v.plate_number} ({vehicle_names.get(v.vehicle_type, v.vehicle_type)})" for v in vehicles]) if vehicles else "Không có xe"
+                for c, value in enumerate((item.full_name, item.phone, getattr(item, "identity_card", ""), vehicle_display, item.valid_until.isoformat(), "Hoạt động" if item.is_active else "Đã khóa")): self.subscriber_table.setItem(r, c, QTableWidgetItem(str(value)))
+                self.subscriber_table.resizeRowToContents(r)
+                actions = QWidget(); row = QHBoxLayout(actions); row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, subscriber=item, vlist=vehicles: self.subscriber_dialog(subscriber, vlist)); remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber)); row.addWidget(edit); row.addWidget(remove); self.subscriber_table.setCellWidget(r, 6, actions)
 
         def add_subscriber(self) -> None:
-            dialog, content, footer = modal_shell(self, "Thêm thuê bao", 680); form = QFormLayout(); content.addLayout(form)
-            name, phone, email, vehicle, start, end, rfid = QLineEdit(), QLineEdit(), QLineEdit(), QComboBox(), QLineEdit(date.today().isoformat()), QLineEdit(date.today().replace(year=date.today().year + 1).isoformat()), QLineEdit(); self.fill_vehicle_combo(vehicle)
-            form.addRow("Họ và tên *", name); form.addRow("Số điện thoại *", phone); form.addRow("Email", email); form.addRow("Loại xe", vehicle); form.addRow("Hiệu lực từ (YYYY-MM-DD)", start); form.addRow("Hiệu lực đến (YYYY-MM-DD)", end); form.addRow("Mã thẻ RFID (tùy chọn)", rfid)
-            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thuê bao"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
-            def save_subscriber() -> None:
-                try:
-                    asyncio.run(_create_subscriber(settings, name.text(), phone.text(), email.text() or None, vehicle.currentData(), start.text(), end.text(), rfid.text() or None)); self.load_subscribers(); dialog.accept()
-                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
-            save.clicked.connect(save_subscriber); dialog.exec()
+            self.subscriber_dialog()
 
-        def edit_subscriber(self, subscriber) -> None:
-            dialog, content, footer = modal_shell(self, "Sửa thuê bao", 620); form = QFormLayout(); content.addLayout(form)
-            name, phone, email, vehicle, start, end = QLineEdit(subscriber.full_name), QLineEdit(subscriber.phone), QLineEdit(subscriber.email or ""), QComboBox(), QLineEdit(subscriber.valid_from.isoformat()), QLineEdit(subscriber.valid_until.isoformat()); self.fill_vehicle_combo(vehicle); vehicle.setCurrentIndex(max(0, vehicle.findData(subscriber.vehicle_type)))
-            form.addRow("Họ tên", name); form.addRow("Số điện thoại", phone); form.addRow("Email", email); form.addRow("Loại xe", vehicle); form.addRow("Hiệu lực từ", start); form.addRow("Hiệu lực đến", end)
-            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+        def edit_subscriber(self, subscriber, vehicles) -> None:
+            self.subscriber_dialog(subscriber, vehicles)
+
+        def subscriber_dialog(self, subscriber=None, vehicles=None) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm thuê bao" if not subscriber else "Sửa thuê bao", 720)
+            
+            grid = QGridLayout(); content.addLayout(grid)
+            
+            name = QLineEdit(subscriber.full_name if subscriber else "")
+            phone = QLineEdit(subscriber.phone if subscriber else "")
+            email = QLineEdit(subscriber.email or "" if subscriber else "")
+            identity_card = QLineEdit(getattr(subscriber, "identity_card", "") if subscriber else "")
+            start = QLineEdit(subscriber.valid_from.isoformat() if subscriber else date.today().isoformat())
+            end = QLineEdit(subscriber.valid_until.isoformat() if subscriber else date.today().replace(year=date.today().year + 1).isoformat())
+            
+            grid.addWidget(label("Họ và tên *", "muted"), 0, 0); grid.addWidget(name, 1, 0)
+            grid.addWidget(label("Số điện thoại *", "muted"), 2, 0); grid.addWidget(phone, 3, 0)
+            grid.addWidget(label("Email", "muted"), 4, 0); grid.addWidget(email, 5, 0)
+            grid.addWidget(label("CMND/CCCD", "muted"), 6, 0); grid.addWidget(identity_card, 7, 0)
+            grid.addWidget(label("Hiệu lực từ", "muted"), 8, 0); grid.addWidget(start, 9, 0)
+            grid.addWidget(label("Hiệu lực đến", "muted"), 10, 0); grid.addWidget(end, 11, 0)
+            
+            if subscriber:
+                active = QComboBox(); active.addItem("Hoạt động", True); active.addItem("Đã khóa", False)
+                active.setCurrentIndex(0 if subscriber.is_active else 1)
+                grid.addWidget(label("Trạng thái", "muted"), 12, 0); grid.addWidget(active, 13, 0)
+
+            vehicle_group = QGroupBox("Phương tiện đăng ký"); grid.addWidget(vehicle_group, 0, 1, 14, 1)
+            vehicle_group.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #d8e1ec; border-radius: 8px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #475569; }")
+            v_layout = QVBoxLayout(vehicle_group)
+            vehicle_list_layout = QVBoxLayout()
+            v_layout.addLayout(vehicle_list_layout)
+            v_layout.addStretch()
+            
+            add_v_btn = QPushButton("+ Thêm xe"); add_v_btn.setStyleSheet("background: #f1f5f9; color: #475569; border-radius: 4px; padding: 6px;")
+            v_layout.addWidget(add_v_btn)
+            
+            vehicle_widgets = []
+            
+            def add_vehicle_row(plate="", v_type=""):
+                row_w = QWidget(); r_lay = QHBoxLayout(row_w); r_lay.setContentsMargins(0,0,0,0)
+                p_input = QLineEdit(plate); p_input.setPlaceholderText("Biển số")
+                t_input = QComboBox(); self.fill_vehicle_combo(t_input)
+                if v_type:
+                    idx = t_input.findData(v_type)
+                    if idx >= 0: t_input.setCurrentIndex(idx)
+                del_btn = QPushButton("✕"); del_btn.setObjectName("danger"); del_btn.setFixedWidth(30)
+                def remove_self():
+                    vehicle_list_layout.removeWidget(row_w); row_w.deleteLater(); vehicle_widgets.remove((p_input, t_input))
+                del_btn.clicked.connect(remove_self)
+                r_lay.addWidget(p_input); r_lay.addWidget(t_input); r_lay.addWidget(del_btn)
+                vehicle_list_layout.addWidget(row_w)
+                vehicle_widgets.append((p_input, t_input))
+                
+            if vehicles:
+                for v in vehicles:
+                    add_vehicle_row(v.plate_number, v.vehicle_type)
+            else:
+                add_vehicle_row()
+                
+            add_v_btn.clicked.connect(lambda: add_vehicle_row())
+            
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi" if subscriber else "Thêm thuê bao"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            
             def save_item() -> None:
-                try: asyncio.run(_update_subscriber(settings, subscriber.id, name.text(), phone.text(), email.text() or None, vehicle.currentData(), start.text(), end.text(), subscriber.is_active)); self.load_subscribers(); dialog.accept()
+                v_data = [{"plate_number": p.text().strip(), "vehicle_type": t.currentData()} for p, t in vehicle_widgets if p.text().strip()]
+                try:
+                    if subscriber:
+                        asyncio.run(_update_subscriber(settings, subscriber.id, name.text(), phone.text(), email.text() or None, identity_card.text(), v_data, start.text(), end.text(), bool(active.currentData())))
+                    else:
+                        asyncio.run(_create_subscriber(settings, name.text(), phone.text(), email.text() or None, identity_card.text(), v_data, start.text(), end.text(), None))
+                    self.load_subscribers(); dialog.accept()
                 except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
             save.clicked.connect(save_item); dialog.exec()
 
@@ -1461,12 +1552,12 @@ async def _delete_user(settings: Settings, user_id: str) -> None:
         async with db.session() as session: await UserManagementUseCase(SQLiteUserRepository(session), PBKDF2PasswordHasher()).delete(user_id)
     finally: await db.dispose()
 
-async def _create_subscriber(settings: Settings, full_name: str, phone: str, email: str | None, vehicle_type: str, valid_from: str, valid_until: str, rfid_code: str | None) -> None:
+async def _create_subscriber(settings: Settings, full_name: str, phone: str, email: str | None, identity_card: str, vehicles: list[dict[str, str]], valid_from: str, valid_until: str, rfid_code: str | None) -> None:
     if not full_name.strip() or not phone.strip(): raise ValueError("Họ tên và số điện thoại là bắt buộc")
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
-            await RegisterSubscriberUseCase(SQLiteSubscriberRepository(session), SQLiteCardRepository(session)).execute(RegisterSubscriberInput(settings.branch_id, full_name.strip(), phone.strip(), vehicle_type, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, rfid_code))
+            await RegisterSubscriberUseCase(SQLiteSubscriberRepository(session), SQLiteCardRepository(session), SQLiteVehicleRepository(session)).execute(RegisterSubscriberInput(settings.branch_id, full_name.strip(), phone.strip(), identity_card.strip(), vehicles, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, rfid_code))
     finally: await db.dispose()
 
 async def _create_fee_rule(settings: Settings, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None) -> None:
@@ -1530,11 +1621,23 @@ async def _subscriber_entities(settings: Settings):
         async with db.session() as session: return await SQLiteSubscriberRepository(session).list_all()
     finally: await db.dispose()
 
-async def _update_subscriber(settings: Settings, subscriber_id: str, full_name: str, phone: str, email: str | None, vehicle_type: str, valid_from: str, valid_until: str, is_active: bool) -> None:
+async def _subscriber_with_vehicles(settings: Settings):
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
-            await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).update(SubscriberUpdateInput(subscriber_id, full_name, phone, vehicle_type, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, is_active))
+            subscribers = await SQLiteSubscriberRepository(session).list_all()
+            vehicles = []
+            for sub in subscribers:
+                sub_vehicles = await SQLiteVehicleRepository(session).list_by_subscriber(sub.id)
+                vehicles.append(sub_vehicles)
+            return list(zip(subscribers, vehicles))
+    finally: await db.dispose()
+
+async def _update_subscriber(settings: Settings, subscriber_id: str, full_name: str, phone: str, email: str | None, identity_card: str, vehicles: list[dict[str, str]], valid_from: str, valid_until: str, is_active: bool) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await SubscriberManagementUseCase(SQLiteSubscriberRepository(session), SQLiteVehicleRepository(session)).update(SubscriberUpdateInput(subscriber_id, full_name, phone, identity_card, vehicles, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, is_active))
     finally: await db.dispose()
 
 async def _delete_subscriber(settings: Settings, subscriber_id: str) -> None:
@@ -1571,32 +1674,23 @@ async def _card_display_rows(settings: Settings):
         return rows
     finally: await db.dispose()
 
-async def _create_card(settings: Settings, rfid_code: str, subscriber_id: str | None) -> None:
+async def _create_card(settings: Settings, rfid_code: str, card_type: str, subscriber_id: str | None) -> None:
     if not rfid_code.strip(): raise ValueError("Mã UID là bắt buộc")
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
             repo = SQLiteCardRepository(session)
             if await repo.get_by_rfid_code(rfid_code.strip()): raise ValueError("Mã UID đã tồn tại")
-            await repo.create(Card(branch_id=settings.branch_id, rfid_code=rfid_code.strip(), subscriber_id=subscriber_id))
+            await repo.create(Card(branch_id=settings.branch_id, rfid_code=rfid_code.strip(), card_type=card_type, subscriber_id=subscriber_id, status="AVAILABLE"))
     finally: await db.dispose()
 
-async def _set_card_active(settings: Settings, card_id: str, active: bool) -> None:
+async def _update_card(settings: Settings, card_id: str, card_type: str, subscriber_id: str | None, status: str) -> None:
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
             repo = SQLiteCardRepository(session); card = await repo.get_by_id(card_id)
             if card is None: raise ValueError("Không tìm thấy thẻ")
-            card.is_active = active; await repo.update(card)
-    finally: await db.dispose()
-
-async def _update_card(settings: Settings, card_id: str, subscriber_id: str | None, active: bool) -> None:
-    db = Database(settings.local_database_url)
-    try:
-        async with db.session() as session:
-            repo = SQLiteCardRepository(session); card = await repo.get_by_id(card_id)
-            if card is None: raise ValueError("Không tìm thấy thẻ")
-            card.subscriber_id, card.is_active = subscriber_id, active
+            card.card_type, card.subscriber_id, card.status = card_type, subscriber_id, status
             await repo.update(card)
     finally: await db.dispose()
 

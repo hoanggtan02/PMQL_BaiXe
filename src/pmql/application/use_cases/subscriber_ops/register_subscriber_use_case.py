@@ -8,9 +8,10 @@ import structlog
 from dataclasses import dataclass
 from datetime import date
 
-from pmql.application.ports.repositories import ICardRepository, ISubscriberRepository
+from pmql.application.ports.repositories import ICardRepository, ISubscriberRepository, IVehicleRepository
 from pmql.domain.entities.card import Card
 from pmql.domain.entities.subscriber import Subscriber
+from pmql.domain.entities.vehicle import Vehicle
 
 log = structlog.get_logger(__name__)
 
@@ -20,7 +21,8 @@ class RegisterSubscriberInput:
     branch_id: str
     full_name: str
     phone: str
-    vehicle_type: str
+    identity_card: str
+    vehicles: list[dict[str, str]]
     valid_from: date
     valid_until: date
     email: str | None = None
@@ -34,9 +36,10 @@ class RegisterSubscriberOutput:
 
 
 class RegisterSubscriberUseCase:
-    def __init__(self, subscriber_repo: ISubscriberRepository, card_repo: ICardRepository) -> None:
+    def __init__(self, subscriber_repo: ISubscriberRepository, card_repo: ICardRepository, vehicle_repo: IVehicleRepository) -> None:
         self._subscribers = subscriber_repo
         self._cards = card_repo
+        self._vehicles = vehicle_repo
 
     async def execute(self, inp: RegisterSubscriberInput) -> RegisterSubscriberOutput:
         subscriber = Subscriber(
@@ -44,12 +47,21 @@ class RegisterSubscriberUseCase:
             full_name=inp.full_name,
             phone=inp.phone,
             email=inp.email,
-            vehicle_type=inp.vehicle_type,
+            identity_card=inp.identity_card,
             valid_from=inp.valid_from,
             valid_until=inp.valid_until,
             is_active=True,
         )
         await self._subscribers.create(subscriber)
+
+        for v_data in inp.vehicles:
+            vehicle = Vehicle(
+                branch_id=inp.branch_id,
+                plate_number=v_data["plate_number"],
+                vehicle_type=v_data["vehicle_type"],
+                subscriber_id=subscriber.id
+            )
+            await self._vehicles.create(vehicle)
 
         card_id: str | None = None
         if inp.rfid_code:

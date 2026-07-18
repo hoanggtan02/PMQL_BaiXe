@@ -70,6 +70,12 @@ class IVehicleRepository(ABC):
     @abstractmethod
     async def update(self, vehicle: Vehicle) -> None: ...
 
+    @abstractmethod
+    async def list_by_subscriber(self, subscriber_id: str) -> list[Vehicle]: ...
+
+    @abstractmethod
+    async def delete(self, vehicle_id: str) -> None: ...
+
 
 class ISubscriberRepository(ABC):
     @abstractmethod

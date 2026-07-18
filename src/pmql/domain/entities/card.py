@@ -10,9 +10,11 @@ class Card:
     id: str = field(default_factory=lambda: str(uuid4()))
     branch_id: str = ""
     rfid_code: str = ""
+    card_type: str = "GUEST"  # GUEST or SUBSCRIBER
     subscriber_id: str | None = None
     vehicle_id: str | None = None
     is_active: bool = True
+    status: str = "AVAILABLE"  # AVAILABLE, IN_USE, LOST, LOCKED
     issued_at: datetime = field(default_factory=datetime.utcnow)
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
