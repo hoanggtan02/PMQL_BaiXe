@@ -68,7 +68,7 @@ def launch(settings: Settings) -> int:
         from PySide6.QtWidgets import (
             QApplication, QAbstractItemView, QComboBox, QDialog, QDialogButtonBox,
             QFormLayout, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
-            QLineEdit, QMainWindow, QMessageBox, QPushButton, QStackedWidget,
+            QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget,
             QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
             QListWidget, QListWidgetItem, QTabWidget, QProgressBar
         )
