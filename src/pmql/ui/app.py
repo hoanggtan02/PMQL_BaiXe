@@ -67,13 +67,47 @@ def launch(settings: Settings) -> int:
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import (
             QApplication, QAbstractItemView, QComboBox, QDialog, QDialogButtonBox,
-            QFormLayout, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel,
+            QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QInputDialog, QLabel,
             QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget,
             QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QHeaderView,
             QListWidget, QListWidgetItem, QTabWidget, QProgressBar
         )
+        from PySide6.QtGui import QIcon, QFont
+        from PySide6.QtCore import QSize
     except ImportError as exc:
         raise RuntimeError('PySide6 is not installed. Run: pip install -e ".[gui]"') from exc
+
+    try:
+        import qtawesome as qta
+        _HAS_QTA = True
+    except ImportError:
+        _HAS_QTA = False
+
+    # --- Icon button helper ---
+    _BTN_ICON_STYLE = (
+        "QPushButton { border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; }"
+    )
+    _BTN_EDIT_STYLE = "QPushButton { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #2563eb; }"
+    _BTN_DEL_STYLE  = "QPushButton { background: #ef4444; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #dc2626; }"
+    _BTN_PLAIN_STYLE = "QPushButton { background: #64748b; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #475569; }"
+
+    def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int = 16) -> QPushButton:
+        """Create a styled icon button using qtawesome icons."""
+        btn = QPushButton()
+        if _HAS_QTA:
+            try:
+                color = "white"
+                ico = qta.icon(icon_name, color=color)
+                btn.setIcon(ico)
+                btn.setIconSize(QSize(size, size))
+                btn.setText(f" {text}")
+            except Exception:
+                btn.setText(text)
+        else:
+            btn.setText(text)
+        btn.setStyleSheet(style)
+        btn.setFixedHeight(30)
+        return btn
 
     def label(text: str, name: str = "", bold: bool = False, style: str = "") -> QLabel:
         item = QLabel(text)
@@ -389,8 +423,24 @@ def launch(settings: Settings) -> int:
                 dialog.accept()
             save.clicked.connect(do_close); dialog.exec()
 
-        def make_table(self, headers: list[str], minimum_rows: int = 10) -> QTableWidget:
-            table = QTableWidget(0, len(headers)); table.setHorizontalHeaderLabels(headers); table.setAlternatingRowColors(True); table.setShowGrid(False); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); table.setMinimumHeight(max(220, minimum_rows * 38)); return table
+        def make_table(self, headers: list[str], minimum_rows: int = 10, action_col_width: int = 160) -> QTableWidget:
+            from PySide6.QtCore import Qt as _Qt
+            table = QTableWidget(0, len(headers))
+            table.setHorizontalHeaderLabels(headers)
+            table.setAlternatingRowColors(True)
+            table.setShowGrid(False)
+            table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            table.verticalHeader().setVisible(False)
+            table.setMinimumHeight(max(220, minimum_rows * 38))
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            hdr = table.horizontalHeader()
+            for i in range(len(headers) - 1):
+                hdr.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+            # Last column is always the action column - fixed width
+            hdr.setSectionResizeMode(len(headers) - 1, QHeaderView.ResizeMode.Fixed)
+            table.setColumnWidth(len(headers) - 1, action_col_width)
+            table.horizontalHeader().setDefaultAlignment(_Qt.AlignmentFlag.AlignCenter)
+            return table
 
         def table_page(self, title: str, headers: list[str], loader) -> QWidget:
             page, box = self.page(); heading = QHBoxLayout(); h = label(title, bold=True); h.setStyleSheet("font-size:24px;"); heading.addWidget(h); heading.addStretch(); refresh = QPushButton("↻  Làm mới"); heading.addWidget(refresh); box.addLayout(heading); search = QLineEdit(); search.setPlaceholderText("Tìm kiếm trong danh sách…"); box.addWidget(search); table = self.make_table(headers); box.addWidget(table, 1)
@@ -842,11 +892,11 @@ def launch(settings: Settings) -> int:
 
         def subscriber_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thuê bao", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thuê bao"); add.setObjectName("primary"); add.clicked.connect(self.add_subscriber); row.addWidget(add); box.addLayout(row)
-            self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "CMND/CCCD", "Phương tiện đăng ký", "Hiệu lực đến", "Trạng thái", "Thao tác"]); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
+            self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "CMND/CCCD", "Phương tiện đăng ký", "Hiệu lực đến", "Trạng thái", "Thao tác"], action_col_width=210); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
 
         def card_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thẻ RFID", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thẻ"); add.setObjectName("primary"); add.clicked.connect(self.add_card); row.addWidget(add); box.addLayout(row)
-            self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"]); box.addWidget(self.card_table, 1); self.load_cards(); return page
+            self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"], action_col_width=210); box.addWidget(self.card_table, 1); self.load_cards(); return page
 
         def load_cards(self) -> None:
             if not hasattr(self, "card_table"): return
@@ -860,13 +910,35 @@ def launch(settings: Settings) -> int:
             for r, (card, subscriber_name) in enumerate(cards):
                 card_type_display = "Thuê bao" if card.card_type == "SUBSCRIBER" else "Vãng lai"
                 status_text = STATUS_MAP.get(card.status, card.status)
-                status_lbl = label(status_text, "badge", True); status_lbl.setStyleSheet(f"background: {STATUS_COLOR.get(card.status, '#ccc')}; color: white; padding: 4px; border-radius: 4px; font-weight: bold;")
-                
+
+                # Center-align cell items
                 for c, value in enumerate((card.rfid_code, card_type_display, subscriber_name if card.card_type == "SUBSCRIBER" else "—")):
-                    self.card_table.setItem(r, c, QTableWidgetItem(str(value)))
-                self.card_table.setCellWidget(r, 3, status_lbl)
-                
-                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("✎ Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, item=card: self.edit_card(item)); remove.clicked.connect(lambda _=False, item=card: self.delete_card(item)); actions_row.addWidget(edit); actions_row.addWidget(remove); self.card_table.setCellWidget(r, 4, actions)
+                    cell = QTableWidgetItem(str(value))
+                    cell.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.card_table.setItem(r, c, cell)
+
+                # Status badge widget (centered) — sized to fit its text so it never gets clipped
+                status_w = QWidget(); sl = QHBoxLayout(status_w); sl.setContentsMargins(4, 6, 4, 6); sl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                status_lbl = label(status_text, "badge", True)
+                status_lbl.setStyleSheet(
+                    f"background: {STATUS_COLOR.get(card.status, '#94a3b8')}; color: white; "
+                    "padding: 4px 12px; border-radius: 10px; font-weight: bold; font-size: 12px;"
+                )
+                status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                status_lbl.adjustSize(); status_lbl.setMinimumWidth(status_lbl.sizeHint().width())
+                sl.addWidget(status_lbl)
+                self.card_table.setCellWidget(r, 3, status_w)
+                self.card_table.setRowHeight(r, 44)
+                self.card_table.resizeRowToContents(r)
+
+                # Action buttons — same icon style as the Subscribers page
+                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(6, 4, 6, 4); actions_row.setSpacing(6)
+                edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE)
+                remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
+                edit.clicked.connect(lambda _=False, item=card: self.edit_card(item))
+                remove.clicked.connect(lambda _=False, item=card: self.delete_card(item))
+                actions_row.addWidget(edit); actions_row.addWidget(remove)
+                self.card_table.setCellWidget(r, 4, actions)
 
         def add_card(self) -> None:
             self.card_dialog()
@@ -1113,6 +1185,7 @@ def launch(settings: Settings) -> int:
             save.clicked.connect(do_save); dialog.exec()
 
         def add_lane(self) -> None:
+            
             self.show_lane_modal()
 
         def edit_lane(self, lane) -> None:
@@ -1132,9 +1205,19 @@ def launch(settings: Settings) -> int:
             self.subscriber_table.setRowCount(len(data))
             for r, (item, vehicles) in enumerate(data):
                 vehicle_display = "\n".join([f"• {v.plate_number} ({vehicle_names.get(v.vehicle_type, v.vehicle_type)})" for v in vehicles]) if vehicles else "Không có xe"
-                for c, value in enumerate((item.full_name, item.phone, getattr(item, "identity_card", ""), vehicle_display, item.valid_until.isoformat(), "Hoạt động" if item.is_active else "Đã khóa")): self.subscriber_table.setItem(r, c, QTableWidgetItem(str(value)))
+                for c, value in enumerate((item.full_name, item.phone, getattr(item, "identity_card", ""), vehicle_display, item.valid_until.isoformat(), "Hoạt động" if item.is_active else "Đã khóa")):
+                    cell_item = QTableWidgetItem(str(value))
+                    cell_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.subscriber_table.setItem(r, c, cell_item)
                 self.subscriber_table.resizeRowToContents(r)
-                actions = QWidget(); row = QHBoxLayout(actions); row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, subscriber=item, vlist=vehicles: self.subscriber_dialog(subscriber, vlist)); remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber)); row.addWidget(edit); row.addWidget(remove); self.subscriber_table.setCellWidget(r, 6, actions)
+                actions = QWidget()
+                row = QHBoxLayout(actions); row.setContentsMargins(6, 4, 6, 4); row.setSpacing(6)
+                edit = icon_btn("fa5s.user-edit", "Sửa", _BTN_EDIT_STYLE)
+                remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
+                edit.clicked.connect(lambda _=False, subscriber=item, vlist=vehicles: self.subscriber_dialog(subscriber, vlist))
+                remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber))
+                row.addWidget(edit); row.addWidget(remove)
+                self.subscriber_table.setCellWidget(r, 6, actions)
 
         def add_subscriber(self) -> None:
             self.subscriber_dialog()
@@ -1643,7 +1726,8 @@ async def _update_subscriber(settings: Settings, subscriber_id: str, full_name: 
 async def _delete_subscriber(settings: Settings, subscriber_id: str) -> None:
     db = Database(settings.local_database_url)
     try:
-        async with db.session() as session: await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).delete(subscriber_id)
+        async with db.session() as session:
+            await SubscriberManagementUseCase(SQLiteSubscriberRepository(session), SQLiteVehicleRepository(session)).delete(subscriber_id)
     finally: await db.dispose()
 
 async def _card_rows(settings: Settings):
