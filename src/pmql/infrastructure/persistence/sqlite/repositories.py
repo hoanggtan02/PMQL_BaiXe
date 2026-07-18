@@ -478,6 +478,7 @@ class SQLiteFeeRuleRepository:
         if row is None:
             raise ValueError(f"FeeRule {rule.id} not found")
         row.name = rule.name
+        row.vehicle_type = rule.vehicle_type
         row.free_minutes = rule.free_minutes
         row.block_minutes = rule.block_minutes
         row.price_per_block = rule.price_per_block
@@ -606,7 +607,7 @@ class SQLiteUserRepository:
 
     async def get_by_id(self, user_id: str) -> User | None:
         row = await self._session.get(UserModel, user_id)
-        return _user_to_entity(row) if row else None
+        return _user_to_entity(row) if row and not row.is_deleted else None
 
     async def create(self, user: User) -> None:
         self._session.add(

@@ -55,8 +55,21 @@ python -m pmql.main reset-password --username admin --password 123
 - **Thuê bao:** thêm, sửa, xóa mềm thuê bao tháng.
 - **Thẻ xe:** nhập mã RFID, gán thẻ cho thuê bao, khóa/mở thẻ.
 - **Biểu phí:** tạo, sửa và xóa mềm quy tắc tính phí.
+- **Loại xe:** tự tạo tên loại xe theo nhu cầu (ví dụ xe đạp điện, xe 7 chỗ). Danh mục này được dùng chung cho thuê bao, biểu phí và lúc ghi xe vào.
 - **Cấu hình làn:** thêm làn cùng thông tin camera, RFID và barrier.
 - **Tài khoản & phân quyền:** tạo tài khoản, tạo role và chọn quyền cho role.
+
+## Cách thao tác cơ bản
+
+1. Vào **Loại xe** để kiểm tra hoặc bổ sung các loại xe của bãi.
+2. Vào **Biểu phí** để tạo mức phí tương ứng với từng loại xe.
+3. Vào **Cấu hình làn** để tạo các làn vào, ra hoặc hai chiều. Các làn này xuất hiện ngay trong màn **Vận hành làn**.
+4. Khi làm việc, mở **Ca làm việc**, chọn đúng làn và dùng nút **Vào/Ra**.
+5. Mọi cửa sổ Thêm/Sửa đều có nút **Lưu**; sau khi lưu, danh sách hoặc thẻ thông tin được cập nhật ngay.
+
+## Phân quyền
+
+Ở màn **Tài khoản & phân quyền**, quản trị viên có thể tạo vai trò mới và chọn từng quyền: vận hành làn, xem phiên gửi xe, quản lý thuê bao, thẻ RFID, biểu phí, cấu hình làn hoặc tài khoản. Menu bên trái tự ẩn các phần mà vai trò hiện tại không được phép dùng.
 
 ## Lưu ý dữ liệu
 

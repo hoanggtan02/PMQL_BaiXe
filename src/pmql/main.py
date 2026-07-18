@@ -150,7 +150,7 @@ async def cmd_init_db() -> None:
     print("Database ready at:", settings.local_database_url)
 
 
-async def cmd_enter(plate: str, vehicle_type: str, rfid: str | None, shift_id: str | None) -> None:
+async def cmd_enter(plate: str, vehicle_type: str, rfid: str | None, shift_id: str | None, lane_id: str | None = None) -> None:
     settings = get_settings()
     db = Database(settings.local_database_url)
 
@@ -167,7 +167,7 @@ async def cmd_enter(plate: str, vehicle_type: str, rfid: str | None, shift_id: s
         )
         result = await use_case.execute(
             VehicleEntryInput(
-                lane_id=DEFAULT_LANE_ID,
+                lane_id=lane_id or DEFAULT_LANE_ID,
                 rfid_code=rfid,
                 plate_number=plate,
                 vehicle_type=vehicle_type,
@@ -180,7 +180,7 @@ async def cmd_enter(plate: str, vehicle_type: str, rfid: str | None, shift_id: s
           f"barrier_opened={result.barrier_opened}")
 
 
-async def cmd_exit(plate: str, rfid: str | None) -> None:
+async def cmd_exit(plate: str, rfid: str | None, lane_id: str | None = None) -> None:
     settings = get_settings()
     db = Database(settings.local_database_url)
 
@@ -195,7 +195,7 @@ async def cmd_exit(plate: str, rfid: str | None) -> None:
             fee_calculator=FeeCalculator(),
             outbox=SQLiteSyncOutboxWriter(session),
         )
-        result = await use_case.execute(VehicleExitInput(lane_id=DEFAULT_LANE_ID, rfid_code=rfid, plate_number=plate))
+        result = await use_case.execute(VehicleExitInput(lane_id=lane_id or DEFAULT_LANE_ID, rfid_code=rfid, plate_number=plate))
 
     await db.dispose()
     print(
@@ -412,6 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_enter = sub.add_parser("enter", help="Record a vehicle entry")
     p_enter.add_argument("--plate", required=True)
     p_enter.add_argument("--type", dest="vehicle_type", default="motorbike", help="Mã loại xe đã cấu hình, ví dụ motorbike")
+    p_enter.add_argument("--lane-id", dest="lane_id", default=None, help="ID làn xe đã cấu hình")
     p_enter.add_argument("--rfid", default=None)
     p_enter.add_argument("--shift-id", dest="shift_id", default=None,
                          help="Operator's currently open shift id (from `open-shift`), so this "
@@ -420,6 +421,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_exit = sub.add_parser("exit", help="Record a vehicle exit and compute the fee")
     p_exit.add_argument("--plate", required=False, default=None)
     p_exit.add_argument("--rfid", required=False, default=None)
+    p_exit.add_argument("--lane-id", dest="lane_id", default=None, help="ID làn xe đã cấu hình")
 
     p_list = sub.add_parser("list-sessions", help="List recent parking sessions for this branch")
     p_list.add_argument("--limit", type=int, default=20)
@@ -428,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_create_user.add_argument("--username", required=True)
     p_create_user.add_argument("--password", required=True)
     p_create_user.add_argument("--full-name", dest="full_name", required=True)
-    p_create_user.add_argument("--role", default="OPERATOR", choices=["OPERATOR", "SUPERVISOR", "ADMIN"])
+    p_create_user.add_argument("--role", default="OPERATOR", help="Tên vai trò đã cấu hình")
 
     p_login = sub.add_parser("login", help="Authenticate an operator by username/password")
     p_login.add_argument("--username", required=True)
@@ -487,7 +489,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_update_user = sub.add_parser("update-user", help="Edit an account or reset its password")
     p_update_user.add_argument("--user-id", required=True)
     p_update_user.add_argument("--full-name", required=True)
-    p_update_user.add_argument("--role", required=True, choices=["OPERATOR", "SUPERVISOR", "ADMIN"])
+    p_update_user.add_argument("--role", required=True, help="Tên vai trò đã cấu hình")
     p_update_user.add_argument("--password", default=None)
     p_update_user.add_argument("--inactive", action="store_true")
     p_delete_user = sub.add_parser("delete-user", help="Delete an account")
@@ -511,12 +513,12 @@ def main() -> None:
         if args.command == "init-db":
             asyncio.run(cmd_init_db())
         elif args.command == "enter":
-            asyncio.run(cmd_enter(args.plate, args.vehicle_type, args.rfid, args.shift_id))
+            asyncio.run(cmd_enter(args.plate, args.vehicle_type, args.rfid, args.shift_id, args.lane_id))
         elif args.command == "exit":
             if not args.plate and not args.rfid:
                 print("Can truyen --plate hoac --rfid", file=sys.stderr)
                 sys.exit(1)
-            asyncio.run(cmd_exit(args.plate, args.rfid))
+            asyncio.run(cmd_exit(args.plate, args.rfid, args.lane_id))
         elif args.command == "list-sessions":
             asyncio.run(cmd_list_sessions(args.limit))
         elif args.command == "create-user":

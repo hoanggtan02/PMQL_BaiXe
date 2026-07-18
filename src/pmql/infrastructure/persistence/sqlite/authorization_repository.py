@@ -40,6 +40,21 @@ class SQLiteAuthorizationRepository:
         result = await self._session.execute(select(PermissionModel).where(PermissionModel.is_deleted.is_(False)).order_by(PermissionModel.code))
         return [(permission.code, permission.description) for permission in result.scalars().all()]
 
+    async def create_permission(self, code: str, description: str) -> tuple[str, str]:
+        code, description = code.strip().lower(), description.strip()
+        if not code or not description:
+            raise ValueError("Mã và mô tả quyền là bắt buộc")
+        existing = (await self._session.execute(select(PermissionModel).where(PermissionModel.code == code))).scalars().first()
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted, existing.description = False, description
+                await self._session.flush()
+                return existing.code, existing.description
+            raise ValueError("Mã quyền đã tồn tại")
+        self._session.add(PermissionModel(id=str(uuid4()), code=code, description=description))
+        await self._session.flush()
+        return code, description
+
     async def list_roles(self) -> list[RoleRecord]:
         await self.ensure_permission_catalog()
         roles = (await self._session.execute(select(RoleModel).where(RoleModel.is_deleted.is_(False)).order_by(RoleModel.name))).scalars().all()
