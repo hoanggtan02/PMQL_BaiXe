@@ -75,11 +75,13 @@ def launch(settings: Settings) -> int:
     except ImportError as exc:
         raise RuntimeError('PySide6 is not installed. Run: pip install -e ".[gui]"') from exc
 
-    def label(text: str, name: str = "", bold: bool = False) -> QLabel:
+    def label(text: str, name: str = "", bold: bool = False, style: str = "") -> QLabel:
         item = QLabel(text)
         if name: item.setObjectName(name)
         if bold:
             font = item.font(); font.setBold(True); item.setFont(font)
+        if style:
+            item.setStyleSheet(style)
         return item
 
     class Login(QWidget):
@@ -1001,8 +1003,18 @@ def launch(settings: Settings) -> int:
 
         def show_lane_modal(self, lane=None):
             dialog = QDialog(self); dialog.setWindowTitle("Thêm làn xe mới" if not lane else "Sửa làn xe"); dialog.setFixedSize(500, 400)
-            dialog.setStyleSheet("QDialog { background: white; border-radius: 12px; } QLineEdit, QComboBox { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }")
+            from PySide6.QtCore import Qt
+            dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.FramelessWindowHint)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            dialog.setStyleSheet("QDialog { background: transparent; } QLineEdit, QComboBox { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }")
+            
+            # Wrap everything in a main frame to handle rounded corners
+            main_frame = QFrame(dialog)
+            main_frame.setStyleSheet("QFrame { background: white; border-radius: 12px; }")
             box = QVBoxLayout(dialog); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(0)
+            box.addWidget(main_frame)
+            
+            inner_box = QVBoxLayout(main_frame); inner_box.setContentsMargins(0, 0, 0, 0); inner_box.setSpacing(0)
             
             # Header
             header = QFrame(); header.setStyleSheet("background: #f97316; border-top-left-radius: 12px; border-top-right-radius: 12px;")
@@ -1011,7 +1023,7 @@ def launch(settings: Settings) -> int:
             hbox.addWidget(title); hbox.addStretch()
             close_btn = QPushButton("✕"); close_btn.setStyleSheet("color: white; font-size: 18px; border: none; background: transparent;")
             close_btn.clicked.connect(dialog.reject); hbox.addWidget(close_btn)
-            box.addWidget(header)
+            inner_box.addWidget(header)
             
             # Body
             body = QWidget(); vbox = QVBoxLayout(body); vbox.setContentsMargins(20, 20, 20, 20); vbox.setSpacing(15)
@@ -1046,7 +1058,7 @@ def launch(settings: Settings) -> int:
             rfid = lane.rfid_device_id if lane else "rfid1"
             barrier = lane.barrier_device_id if lane else "bar1"
             
-            box.addWidget(body); box.addStretch()
+            inner_box.addWidget(body); inner_box.addStretch()
             
             # Footer
             footer = QHBoxLayout(); footer.setContentsMargins(20, 10, 20, 20)
@@ -1054,7 +1066,7 @@ def launch(settings: Settings) -> int:
             cancel = QPushButton("Hủy"); cancel.setStyleSheet("background: #94a3b8; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
             save = QPushButton("💾 Lưu cấu hình"); save.setStyleSheet("background: #f97316; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
             cancel.clicked.connect(dialog.reject); footer.addWidget(cancel); footer.addWidget(save)
-            box.addLayout(footer)
+            inner_box.addLayout(footer)
             
             def do_save():
                 try:
