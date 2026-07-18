@@ -112,6 +112,9 @@ class ICardRepository(ABC):
     @abstractmethod
     async def list_all(self) -> list[Card]: ...
 
+    @abstractmethod
+    async def delete(self, card_id: str) -> None: ...
+
 
 class IFeeRuleRepository(ABC):
     @abstractmethod
@@ -152,6 +155,9 @@ class ILaneRepository(ABC):
 
     @abstractmethod
     async def update(self, lane: Lane) -> None: ...
+
+    @abstractmethod
+    async def delete(self, lane_id: str) -> None: ...
 
 
 class IShiftRepository(ABC):

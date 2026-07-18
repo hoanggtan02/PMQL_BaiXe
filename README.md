@@ -1,197 +1,64 @@
 # PMQL Bãi Xe
 
-Hệ thống quản lý bãi xe **local-first**: mỗi chi nhánh chạy trên SQLite tại chỗ
-(hoạt động được cả khi mất mạng), đồng bộ định kỳ lên MySQL trung tâm.
-Kiến trúc theo hướng **Clean Architecture** (domain → application → infrastructure).
+PMQL Bãi Xe là ứng dụng máy tính để quản lý bãi giữ xe: ghi nhận xe vào/ra,
+tính phí, theo dõi ca làm việc, quản lý thuê bao tháng và thẻ RFID.
 
-## Kiến trúc thư mục
+## Mục lục
 
-```
-src/pmql/
-├── domain/            # Entities, value objects, domain services — KHÔNG phụ thuộc framework
-├── application/       # Use cases + ports (interfaces) — không import infrastructure
-├── infrastructure/    # Cài đặt cụ thể: SQLite repos, mock hardware, outbox writer, security
-├── config/            # Settings đọc từ .env
-└── main.py            # Composition root — CLI demo nối use case với adapter thật
-```
-
-Nguyên tắc: `domain` không phụ thuộc gì cả; `application` chỉ phụ thuộc `domain`
-và các *port* (ABC) của chính nó; `infrastructure` implement các port đó.
-`main.py` là nơi duy nhất được phép "biết" cả use case lẫn adapter cụ thể.
+- [Cài đặt](#cài-đặt)
+- [Khởi động](#khởi-động)
+- [Đăng nhập](#đăng-nhập)
+- [Các màn hình chính](#các-màn-hình-chính)
+- [Lưu ý dữ liệu](#lưu-ý-dữ-liệu)
 
 ## Cài đặt
 
-Yêu cầu Python >= 3.12.
+Cần có Python 3.12 hoặc mới hơn. Mở Command Prompt tại thư mục dự án và chạy:
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev,gui]"   # bỏ ,gui nếu chỉ chạy CLI/test
-cp .env.example .env              # chỉnh các giá trị cho phù hợp
+```bat
+python -m pip install -e ".[gui,dev]"
 ```
 
-## Chạy thử (CLI demo, chưa cần phần cứng thật)
+## Khởi động
 
-```bash
-# 1. Tạo schema SQLite + seed 1 làn xe và 2 quy tắc phí mặc định
+Lần đầu sử dụng, tạo dữ liệu ban đầu:
+
+```bat
 python -m pmql.main init-db
-
-# 2. Xe vào
-python -m pmql.main enter --plate 51F-12345 --type motorbike
-
-# 3. Xe ra (tính phí tự động theo FeeCalculator)
-python -m pmql.main exit --plate 51F-12345
-
-# 4. Xem cac phien do xe gan day nhat (MOI: truoc day chi la docstring, chua co lenh)
-python -m pmql.main list-sessions --limit 20
 ```
 
-### Tài khoản, ca làm việc, thuê bao, alert (MỚI — đã nối CLI ở đợt này)
+Sau đó mở ứng dụng:
 
-Các use case này đã tồn tại sẵn ở tầng `application` từ trước, nhưng
-`main.py` trước đây **chưa đăng ký lệnh CLI nào** để gọi tới chúng. Đợt cập
-nhật này bổ sung phần composition-root còn thiếu đó:
-
-```bash
-# Tạo tài khoản vận hành + đăng nhập
-python -m pmql.main create-user --username an.nguyen --password s3cret --full-name "An Nguyen"
-python -m pmql.main login --username an.nguyen --password s3cret
-
-# Mở màn hình đăng nhập desktop (cài UI một lần: pip install -e ".[gui]")
+```bat
 python -m pmql.main ui
+```
 
-# Mở / đóng ca làm việc (đóng ca sẽ in tổng số phiên + doanh thu)
-python -m pmql.main open-shift --operator-id an.nguyen
-python -m pmql.main enter --plate 51F-12345 --type motorbike --shift-id <shift_id>
-python -m pmql.main close-shift --operator-id an.nguyen
+## Đăng nhập
 
-# Đăng ký thuê bao tháng (có thể phát hành thẻ RFID ngay)
-python -m pmql.main register-subscriber --full-name "Le Van A" --phone 0900000000 \
-    --vehicle-type motorbike --valid-from 2026-01-01 --valid-until 2026-12-31 --rfid AABBCC
+Tài khoản ban đầu:
 
-# Xác nhận một alert hệ thống
-python -m pmql.main ack-alert --alert-id <alert_id> --user-id an.nguyen
+| Tên đăng nhập | Mật khẩu |
+| --- | --- |
+| `admin` | `123` |
 
-# CRUD quản trị (dùng UUID in ra từ lệnh list)
-python -m pmql.main list-users
+Nếu tài khoản `admin` đã tồn tại với mật khẩu khác:
+
+```bat
 python -m pmql.main reset-password --username admin --password 123
-python -m pmql.main list-subscribers
-python -m pmql.main update-subscriber --subscriber-id <id> --full-name "Le Van A" --phone 0900000000 --vehicle-type motorbike --valid-from 2026-01-01 --valid-until 2026-12-31
-python -m pmql.main delete-subscriber --subscriber-id <id>
-python -m pmql.main list-fee-rules
-python -m pmql.main create-fee-rule --name "Xe tải" --vehicle-type truck --price-per-block 30000
-python -m pmql.main update-fee-rule --rule-id <id> --name "Xe tải mới" --vehicle-type truck --price-per-block 35000
-python -m pmql.main delete-fee-rule --rule-id <id>
 ```
 
-File DB nằm ở `./data/parking_local.db` (xem `LOCAL_DATABASE_URL` trong `.env`).
+## Các màn hình chính
 
-## Chạy test
+- **Tổng quan:** số xe trong bãi, lượt xe và doanh thu.
+- **Vận hành làn:** mở ca, ghi xe vào/ra và xem trạng thái làn.
+- **Phiên gửi xe:** theo dõi các xe đang gửi và lịch sử xe ra.
+- **Thuê bao:** thêm, sửa, xóa mềm thuê bao tháng.
+- **Thẻ xe:** nhập mã RFID, gán thẻ cho thuê bao, khóa/mở thẻ.
+- **Biểu phí:** tạo, sửa và xóa mềm quy tắc tính phí.
+- **Cấu hình làn:** thêm làn cùng thông tin camera, RFID và barrier.
+- **Tài khoản & phân quyền:** tạo tài khoản, tạo role và chọn quyền cho role.
 
-```bash
-pytest
-```
+## Lưu ý dữ liệu
 
-## Hiện trạng — đã làm / còn thiếu
-
-### Đã có (kể từ đợt cập nhật gần nhất)
-
-- Domain entities, value objects, `FeeCalculator`.
-- Use case vào/ra xe (`VehicleEntryUseCase` / `VehicleExitUseCase`), toàn bộ
-  port interfaces, repository SQLite cho Lane/Vehicle/Card/Subscriber/FeeRule/
-  Session, mock hardware, outbox ghi transactional cho đồng bộ, CLI chạy thử
-  end-to-end.
-- Model + repository SQLite cho `User`, `Shift`, `Alert`, `Device` — các port
-  (`IUserRepository`, `IShiftRepository`, `IAlertRepository`,
-  `IDeviceRepository`) đã tồn tại từ trước nhưng chưa có cài đặt cụ thể nào
-  cho tới đợt trước.
-- Use case mở/đóng ca làm việc (`OpenShiftUseCase` / `CloseShiftUseCase`),
-  đăng nhập/tạo tài khoản (`LoginUseCase` / `CreateUserUseCase` — băm mật
-  khẩu bằng PBKDF2-SHA256, thuần thư viện chuẩn, không thêm dependency
-  mới), đăng ký thuê bao (`RegisterSubscriberUseCase`), xác nhận alert
-  (`AcknowledgeAlertUseCase`).
-- `ParkingSession.shift_id` — trước đây `list_by_shift()` luôn trả về *toàn
-  bộ* bảng sessions bất kể `shift_id` truyền vào. Giờ session được gắn với
-  ca làm việc đang mở tại thời điểm xe vào (`VehicleEntryInput.shift_id`),
-  và `list_by_shift()` lọc đúng theo đó.
-- Đã sửa lỗi `VehicleExitUseCase` tra cứu phiên đang hoạt động bằng RFID sai
-  (so sánh trực tiếp mã quét thô thay vì id nội bộ của Card).
-
-**Mới thêm ở đợt này:**
-
-- **CLI (`main.py`) đã có đủ lệnh cho mọi use case đã tồn tại ở tầng
-  application:** `list-sessions`, `create-user`, `login`, `open-shift`,
-  `close-shift`, `register-subscriber`, `ack-alert` — trước đây các use case
-  này có sẵn nhưng không thể gọi được từ CLI (composition root còn thiếu).
-  Lệnh `enter` cũng nhận thêm `--shift-id` để có thể gắn phiên vào ca đang mở.
-- **`IFeeRuleRepository.delete`** — trước đây interface và cài đặt SQLite
-  chỉ có thể "tắt" một quy tắc phí qua `update(is_active=False)`, không có
-  cách xóa hẳn. Đã thêm `delete(rule_id)` vào cả port và
-  `SQLiteFeeRuleRepository`.
-- **`ISessionRepository.list_recent` / `SQLiteSessionRepository.list_recent`**
-  — trước đây không có cách nào liệt kê session theo chi nhánh; đây là điều
-  kiện để lệnh CLI `list-sessions` hoạt động (lọc theo `branch_id`, sắp xếp
-  theo `entry_time` giảm dần).
-- Test hồi quy cho các phần trên: `tests/test_new_repo_and_cli_additions.py`.
-
-### Chưa có (cố ý để lại — vượt phạm vi đợt sửa này)
-
-Đợt này tập trung vào các mục nhỏ, có thể kiểm chứng ngay (CLI + 2 phương
-thức repository còn thiếu). Các mục lớn dưới đây vẫn **chưa làm**, vì mỗi
-mục đòi hỏi thiết kế/kiểm thử riêng đáng kể và không phù hợp để làm vội
-trong cùng một đợt nhỏ:
-
-- Adapter phần cứng thật (camera/OpenCV, ANPR, đầu đọc RFID qua pyserial,
-  điều khiển barrier qua pymodbus) — hiện chỉ có bản mock trong
-  `infrastructure/hardware/mock_hardware.py`.
-- Worker đẩy dữ liệu từ `sync_outbox` (SQLite) lên MySQL trung tâm.
-- Alembic migrations cho schema (hiện dùng `create_all` tiện cho dev, chưa
-  dùng được cho migration production).
-- Test coverage cho tầng infrastructure ngoài các test tích hợp hiện có
-  (mới có test cho domain/application qua SQLite thật, chưa test riêng
-  từng repository/mapper một cách biệt lập).
-- Xử lý múi giờ: toàn bộ timestamp hiện là timezone-naive UTC
-  (`datetime.utcnow()`), phù hợp cho MVP nhưng nên chuyển sang
-  timezone-aware trước khi lên production.
-
-### CRUD quản trị đã bổ sung
-
-- Tài khoản: liệt kê, cập nhật tên/role/trạng thái, đổi mật khẩu và xoá.
-- Thuê bao: liệt kê, sửa thông tin/gia hạn/kích hoạt, xoá; tạo mới vẫn dùng
-  `register-subscriber` để có thể phát hành RFID trong cùng transaction.
-- Biểu phí: liệt kê, thêm, sửa và xoá; các giá trị tiền/phút không hợp lệ bị
-  từ chối ở application layer.
-- `init-db` seed tài khoản phát triển `admin / 123` nếu database chưa có user
-  `admin`. Với database đã tạo, chạy `reset-password --username admin --password 123`.
-
-> Lưu ý môi trường xây dựng đợt này: các file đã được kiểm tra cú pháp bằng
-> `python -m py_compile` cho toàn bộ `src/` và `tests/`, nhưng bản build lại
-> trong container không có mạng để tải `sqlalchemy`/`pytest`/... nên bộ test
-> **chưa được chạy thực tế** ở đây — hãy chạy `pip install -e ".[dev]"` rồi
-> `pytest` ở máy có mạng để xác nhận trước khi merge.
-
-## Quy ước quan trọng
-
-- **Tiền tệ luôn là `int` (VND)** — không bao giờ dùng `float` cho tiền
-  (xem `domain/value_objects/money.py`).
-- Mỗi ghi dữ liệu nghiệp vụ đi kèm một bản ghi trong `sync_outbox` **trong cùng
-  transaction** — đảm bảo không bao giờ mất sự kiện đồng bộ khi mất điện/crash.
-- Mật khẩu **không bao giờ** lưu dạng plain text — luôn đi qua
-  `IPasswordHasher` (cài đặt mặc định: PBKDF2-SHA256, 260,000 vòng lặp).
-- `ParkingSession.shift_id` nên luôn được truyền khi gọi
-  `VehicleEntryUseCase` (CLI: `enter --shift-id ...`) một khi hệ thống ca
-  làm việc đã được bật lên — nếu để trống, phiên đó sẽ không được tính vào
-  ca nào khi đóng ca.
-
-## Đăng nhập, phân quyền và UI desktop
-
-- `LoginUseCase` nhận thêm `JwtTokenService` tại composition root và trả về
-  access token HS256 cùng hạn dùng. Token chỉ chứa identity/role/branch, được
-  ký bằng `SECRET_KEY`, và UI chỉ giữ trong bộ nhớ.
-- `GetCurrentUserUseCase` xác thực token rồi kiểm tra user vẫn active và role
-  không bị thay đổi. `require_roles(...)` là decorator cho controller/UI/API;
-  nó yêu cầu `actor=AuthenticatedUser` và ném `InsufficientPermissionsError`
-  khi actor không có role được phép.
-- UI PySide6 là dependency tuỳ chọn: cài `pip install -e ".[gui]"`, sau đó
-  chạy `python -m pmql.main ui`. Màn hình dashboard hiển thị đúng người đang
-  đăng nhập và chỉ hiện các mục giám sát/quản trị tương ứng role.
+Dữ liệu được lưu cục bộ trong `data/parking_local.db`. Thao tác xóa chỉ ẩn
+dữ liệu khỏi danh sách, không xóa vĩnh viễn lịch sử vận hành.

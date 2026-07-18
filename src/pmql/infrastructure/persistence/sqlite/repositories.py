@@ -258,6 +258,12 @@ class SQLiteLaneRepository:
         row.sync_version = lane.sync_version
         await self._session.flush()
 
+    async def delete(self, lane_id: str) -> None:
+        row = await self._session.get(LaneModel, lane_id)
+        if row is not None and not row.is_deleted:
+            row.is_deleted = True
+            await self._session.flush()
+
 
 class SQLiteVehicleRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -355,6 +361,12 @@ class SQLiteCardRepository:
     async def list_all(self) -> list[Card]:
         result = await self._session.execute(select(CardModel).where(CardModel.is_deleted.is_(False)).order_by(CardModel.created_at.desc()))
         return [_card_to_entity(r) for r in result.scalars().all()]
+
+    async def delete(self, card_id: str) -> None:
+        row = await self._session.get(CardModel, card_id)
+        if row is not None and not row.is_deleted:
+            row.is_deleted = True
+            await self._session.flush()
 
 
 class SQLiteSubscriberRepository:

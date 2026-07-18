@@ -67,6 +67,7 @@ from pmql.domain.services.fee_calculator import FeeCalculator
 from pmql.infrastructure.hardware.mock_hardware import MockBarrierController
 from pmql.infrastructure.persistence.sqlite.database import Database
 from pmql.infrastructure.persistence.sqlite.authorization_repository import SQLiteAuthorizationRepository
+from pmql.infrastructure.persistence.sqlite.vehicle_type_repository import SQLiteVehicleTypeRepository
 from pmql.infrastructure.persistence.sqlite.repositories import (
     SQLiteAlertRepository,
     SQLiteCardRepository,
@@ -98,6 +99,7 @@ async def cmd_init_db() -> None:
         fee_repo = SQLiteFeeRuleRepository(session)
         user_repo = SQLiteUserRepository(session)
         await SQLiteAuthorizationRepository(session).ensure_starter_roles()
+        await SQLiteVehicleTypeRepository(session).ensure_defaults()
 
         if await lane_repo.get_by_id(DEFAULT_LANE_ID) is None:
             await lane_repo.create(
@@ -409,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_enter = sub.add_parser("enter", help="Record a vehicle entry")
     p_enter.add_argument("--plate", required=True)
-    p_enter.add_argument("--type", dest="vehicle_type", default="motorbike", choices=["motorbike", "car", "truck"])
+    p_enter.add_argument("--type", dest="vehicle_type", default="motorbike", help="Mã loại xe đã cấu hình, ví dụ motorbike")
     p_enter.add_argument("--rfid", default=None)
     p_enter.add_argument("--shift-id", dest="shift_id", default=None,
                          help="Operator's currently open shift id (from `open-shift`), so this "
@@ -444,7 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_reg_sub.add_argument("--full-name", dest="full_name", required=True)
     p_reg_sub.add_argument("--phone", required=True)
     p_reg_sub.add_argument("--vehicle-type", dest="vehicle_type", required=True,
-                           choices=["motorbike", "car", "truck"])
+                           help="Mã loại xe đã cấu hình")
     p_reg_sub.add_argument("--valid-from", dest="valid_from", required=True, help="YYYY-MM-DD")
     p_reg_sub.add_argument("--valid-until", dest="valid_until", required=True, help="YYYY-MM-DD")
     p_reg_sub.add_argument("--email", default=None)
@@ -455,7 +457,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_update_sub.add_argument("--subscriber-id", required=True)
     p_update_sub.add_argument("--full-name", required=True)
     p_update_sub.add_argument("--phone", required=True)
-    p_update_sub.add_argument("--vehicle-type", required=True, choices=["motorbike", "car", "truck"])
+    p_update_sub.add_argument("--vehicle-type", required=True, help="Mã loại xe đã cấu hình")
     p_update_sub.add_argument("--valid-from", required=True)
     p_update_sub.add_argument("--valid-until", required=True)
     p_update_sub.add_argument("--email", default=None)
@@ -465,7 +467,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_fee_arguments(command: argparse.ArgumentParser) -> None:
         command.add_argument("--name", required=True)
-        command.add_argument("--vehicle-type", required=True, choices=["motorbike", "car", "truck"])
+        command.add_argument("--vehicle-type", required=True, help="Mã loại xe đã cấu hình")
         command.add_argument("--free-minutes", type=int, default=10)
         command.add_argument("--block-minutes", type=int, default=60)
         command.add_argument("--price-per-block", type=int, required=True)

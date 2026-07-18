@@ -245,3 +245,15 @@ class RolePermissionModel(Base):
 
     role_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     permission_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+
+
+class VehicleTypeModel(Base):
+    """Configurable vehicle category used across subscribers and fee rules."""
+    __tablename__ = "vehicle_types"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(100))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

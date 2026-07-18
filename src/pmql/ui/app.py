@@ -9,13 +9,17 @@ from pmql.application.use_cases.auth.create_user_use_case import CreateUserInput
 from pmql.application.use_cases.auth.login_use_case import LoginInput, LoginUseCase
 from pmql.application.use_cases.lane_ops.vehicle_entry_use_case import VehicleEntryInput, VehicleEntryUseCase
 from pmql.application.use_cases.lane_ops.vehicle_exit_use_case import VehicleExitInput, VehicleExitUseCase
-from pmql.application.use_cases.management_ops import UserManagementUseCase, UserUpdateInput
+from pmql.application.use_cases.management_ops import FeeRuleInput, FeeRuleManagementUseCase, SubscriberManagementUseCase, SubscriberUpdateInput, UserManagementUseCase, UserUpdateInput
+from pmql.application.use_cases.subscriber_ops.register_subscriber_use_case import RegisterSubscriberInput, RegisterSubscriberUseCase
 from pmql.application.use_cases.shift_ops.open_shift_use_case import OpenShiftInput, OpenShiftUseCase
 from pmql.config import Settings
+from pmql.domain.entities.card import Card
+from pmql.domain.entities.lane import Lane
 from pmql.domain.services.fee_calculator import FeeCalculator
 from pmql.infrastructure.hardware.mock_hardware import MockBarrierController
 from pmql.infrastructure.persistence.sqlite.database import Database
 from pmql.infrastructure.persistence.sqlite.authorization_repository import SQLiteAuthorizationRepository
+from pmql.infrastructure.persistence.sqlite.vehicle_type_repository import SQLiteVehicleTypeRepository
 from pmql.infrastructure.persistence.sqlite.repositories import (
     SQLiteAlertRepository, SQLiteCardRepository, SQLiteFeeRuleRepository,
     SQLiteLaneRepository, SQLiteSessionRepository, SQLiteShiftRepository,
@@ -24,10 +28,11 @@ from pmql.infrastructure.persistence.sqlite.repositories import (
 from pmql.infrastructure.security.jwt_token_service import JwtTokenService
 from pmql.infrastructure.security.password_hasher import PBKDF2PasswordHasher
 from pmql.infrastructure.sync.outbox_writer import SQLiteSyncOutboxWriter
+from pmql.ui.components import LIGHT_THEME as THEME, modal_shell
 
 DEFAULT_LANE_ID = "lane-main-in-out"
 
-THEME = """
+LEGACY_THEME = """
 * { font-family: 'Segoe UI', Arial; font-size: 13px; color: #f8fafc; }
 QMainWindow, QWidget#root, QWidget#page { background: #1e1e2f; }
 QFrame#sidebar { background: #171724; border-right: 1px solid #303047; }
@@ -88,7 +93,7 @@ def launch(settings: Settings) -> int:
             for line in ("✓ Vận hành làn xe thời gian thực", "✓ Quản lý thuê bao & thẻ RFID", "✓ Báo cáo doanh thu và ca làm việc", "✓ Phân quyền tài khoản vận hành"):
                 left.addWidget(label(line)); left.addSpacing(12)
             left.addStretch()
-            form_box = QFrame(); form = QVBoxLayout(form_box); form.setContentsMargins(58, 70, 58, 55); form.addStretch()
+            form_box = QFrame(); form_box.setObjectName("card"); form = QVBoxLayout(form_box); form.setContentsMargins(58, 70, 58, 55); form.addStretch()
             h = label("Đăng nhập", bold=True); h.setStyleSheet("font-size:27px;"); form.addWidget(h); form.addWidget(label("Chào mừng bạn quay lại hệ thống PMQL.", "muted")); form.addSpacing(25)
             self.username, self.password = QLineEdit("admin"), QLineEdit(); self.password.setEchoMode(QLineEdit.EchoMode.Password); self.password.setPlaceholderText("Mật khẩu")
             fields = QFormLayout(); fields.addRow("Tên đăng nhập", self.username); fields.addRow("Mật khẩu", self.password); form.addLayout(fields); form.addSpacing(18)
@@ -104,22 +109,26 @@ def launch(settings: Settings) -> int:
     class Main(QMainWindow):
         def __init__(self, user: object) -> None:
             super().__init__(); self.user = user; self.shift_id: str | None = None; self.nav: dict[str, QPushButton] = {}
+            try: self.permission_codes = asyncio.run(_role_permissions(settings, getattr(user, "role")))
+            except Exception: self.permission_codes = set()
             self.setWindowTitle("PMQL Bãi Xe – Quản trị vận hành"); self.setMinimumSize(1180, 720); self.setStyleSheet(THEME)
             root = QWidget(); root.setObjectName("root"); layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
             layout.addWidget(self.build_sidebar()); right = QWidget(); right_layout = QVBoxLayout(right); right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(0)
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
-            self.pages = {"overview": self.overview_page(), "operations": self.operations_page(), "sessions": self.table_page("Phiên gửi xe", ["Biển số", "Trạng thái", "Vào lúc", "Ra lúc", "Phí"], _session_rows), "shifts": self.table_page("Ca làm việc", ["Nhân viên", "Bắt đầu", "Kết thúc", "Doanh thu", "Trạng thái"], _shift_rows), "subscribers": self.table_page("Quản lý thuê bao", ["Họ tên", "Số điện thoại", "Loại xe", "Hiệu lực đến", "Trạng thái"], _subscriber_rows), "cards": self.table_page("Quản lý thẻ RFID", ["Mã thẻ", "Thuê bao", "Xe", "Trạng thái"], _card_rows), "alerts": self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page(), "accounts": self.accounts_page()}
+            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": lambda: self.table_page("Phiên gửi xe", ["Biển số", "Trạng thái", "Vào lúc", "Ra lúc", "Phí"], _session_rows), "shifts": lambda: self.table_page("Ca làm việc", ["Nhân viên", "Bắt đầu", "Kết thúc", "Doanh thu", "Trạng thái"], _shift_rows), "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page}
+            self.pages = {key: factory() for key, factory in self.page_factories.items()}
             for page in self.pages.values(): self.stack.addWidget(page)
             self.go("overview")
 
         def build_sidebar(self) -> QWidget:
             side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(250); box = QVBoxLayout(side); box.setContentsMargins(12, 20, 12, 16)
             box.addWidget(label("P  PMQL BÃI XE", bold=True)); box.addWidget(label("Hệ thống quản lý bãi xe", "muted")); box.addSpacing(18)
-            groups = [("", [("overview", "▦  Tổng quan"), ("operations", "⚑  Vận hành làn"), ("sessions", "◌  Phiên gửi xe"), ("alerts", "▲  Cảnh báo"), ("shifts", "◴  Ca làm việc")]), ("QUẢN LÝ", [("subscribers", "▣  Thuê bao"), ("cards", "▤  Thẻ xe"), ("fees", "◆  Biểu phí")]), ("HỆ THỐNG", [("accounts", "♙  Tài khoản & phân quyền")])]
+            groups = [("", [("overview", "▦  Tổng quan"), ("operations", "⚑  Vận hành làn"), ("sessions", "◌  Phiên gửi xe"), ("alerts", "▲  Cảnh báo"), ("shifts", "◴  Ca làm việc")]), ("QUẢN LÝ", [("subscribers", "▣  Thuê bao"), ("cards", "▤  Thẻ xe"), ("fees", "◆  Biểu phí"), ("lanes", "⚙  Cấu hình làn"), ("vehicle_types", "▧  Loại xe")]), ("HỆ THỐNG", [("accounts", "♙  Tài khoản & phân quyền")])]
             for group, links in groups:
                 if group: box.addWidget(label(group, "section"))
+                required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.manage", "shifts": "shift.manage", "subscribers": "subscriber.manage", "cards": "card.manage", "fees": "fee.manage", "lanes": "lane.view", "vehicle_types": "fee.manage", "accounts": "user.manage"}
                 for key, text in links:
-                    if key == "accounts" and getattr(self.user, "role") != "ADMIN": continue
+                    if key in required and required[key] not in self.permission_codes: continue
                     button = QPushButton(text); button.setObjectName("nav"); button.clicked.connect(lambda _=False, target=key: self.go(target)); box.addWidget(button); self.nav[key] = button
             box.addStretch(); box.addWidget(label("ĐANG ĐĂNG NHẬP", "section")); box.addWidget(label(getattr(self.user, "full_name"), bold=True)); box.addWidget(label(getattr(self.user, "role"), "badge", True)); return side
 
@@ -129,9 +138,20 @@ def launch(settings: Settings) -> int:
             search = QLineEdit(); search.setPlaceholderText("⌕  Tìm kiếm…"); search.setMaximumWidth(285); row.addWidget(search); row.addSpacing(14); row.addWidget(label("● Kết nối", "badge", True)); row.addSpacing(12); row.addWidget(label(f"◉  {getattr(self.user, 'username')}", bold=True)); return bar
 
         def go(self, key: str) -> None:
-            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền"}[key])
+            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền"}[key])
             for item_key, button in self.nav.items(): button.setProperty("active", item_key == key); button.style().unpolish(button); button.style().polish(button)
             if key in {"overview", "operations"}: self.refresh_live()
+
+        def reload_page(self, key: str) -> None:
+            """Recreate a data page so CRUD changes are visible immediately."""
+            old_page = self.pages[key]
+            index = self.stack.indexOf(old_page)
+            new_page = self.page_factories[key]()
+            self.stack.removeWidget(old_page)
+            old_page.deleteLater()
+            self.stack.insertWidget(index, new_page)
+            self.pages[key] = new_page
+            self.go(key)
 
         def page(self) -> tuple[QWidget, QVBoxLayout]:
             page = QWidget(); page.setObjectName("page"); box = QVBoxLayout(page); box.setContentsMargins(28, 24, 28, 24); box.setSpacing(16); return page, box
@@ -141,15 +161,19 @@ def launch(settings: Settings) -> int:
 
         def overview_page(self) -> QWidget:
             page, box = self.page(); title = label("Tổng quan hệ thống", bold=True); title.setStyleSheet("font-size:24px;"); box.addWidget(title); box.addWidget(label("Tình hình vận hành bãi xe hôm nay.", "muted")); grid = QGridLayout(); self.overview_values = []
-            for index, caption in enumerate(("XE ĐANG TRONG BÃI", "LƯỢT XE HÔM NAY", "DOANH THU HÔM NAY", "TÀI KHOẢN HOẠT ĐỘNG")):
-                frame, value = self.card(caption); grid.addWidget(frame, 0, index); self.overview_values.append(value)
+            colors = ("#2f66d0", "#159947", "#f06d1c", "#cf3436")
+            for index, caption in enumerate(("XE ĐANG TRONG BÃI", "LƯỢT XE HÔM NAY", "DOANH THU HÔM NAY", "CẢNH BÁO CHỜ XỬ LÝ")):
+                frame, value = self.card(caption); frame.setStyleSheet(f"background:{colors[index]}; border:0; border-radius:10px;")
+                value.setStyleSheet("color:white; font-size:27px; font-weight:800;")
+                frame.findChild(QLabel, "metricCaption").setStyleSheet("color:#e8f0ff; font-weight:700;")
+                grid.addWidget(frame, 0, index); self.overview_values.append(value)
             box.addLayout(grid); panel = QFrame(); panel.setObjectName("panel"); inside = QVBoxLayout(panel); inside.addWidget(label("Xe đang trong bãi", bold=True)); self.live_table = self.make_table(["Biển số", "Trạng thái", "Thời điểm vào", "Làn vào"], 6); inside.addWidget(self.live_table); box.addWidget(panel, 1); return page
 
         def operations_page(self) -> QWidget:
             page, box = self.page(); top = QHBoxLayout(); top.addWidget(label("Vận hành làn xe", bold=True)); top.addStretch(); self.shift_button = QPushButton("▶  Mở ca làm việc"); self.shift_button.setObjectName("success"); self.shift_button.clicked.connect(self.open_shift); top.addWidget(self.shift_button); box.addLayout(top)
             self.operation_note = label("Chưa mở ca. Mở ca trước khi ghi nhận xe vào.", "muted"); box.addWidget(self.operation_note); grid = QGridLayout(); self.lane_plate = []
             for index, (name, direction) in enumerate((("Làn vào 1", "VÀO"), ("Làn vào 2", "VÀO"), ("Làn ra 1", "RA"), ("Làn ra 2", "RA"))):
-                card = QFrame(); card.setObjectName("card"); card_box = QVBoxLayout(card); row = QHBoxLayout(); row.addWidget(label(name, bold=True)); row.addStretch(); row.addWidget(label(direction, "badge", True)); card_box.addLayout(row); card_box.addWidget(label("Camera đang chờ kết nối", "muted")); plate = label("—", "metricValue", True); plate.setAlignment(Qt.AlignmentFlag.AlignCenter); plate.setStyleSheet("background:#202134;border-radius:8px;padding:13px;color:#fbbf24;"); card_box.addWidget(plate); self.lane_plate.append(plate)
+                card = QFrame(); card.setObjectName("card"); card_box = QVBoxLayout(card); row = QHBoxLayout(); row.addWidget(label(name, bold=True)); row.addStretch(); row.addWidget(label(direction, "badge", True)); card_box.addLayout(row); card_box.addWidget(label("Camera đang chờ kết nối", "muted")); plate = label("—", "metricValue", True); plate.setAlignment(Qt.AlignmentFlag.AlignCenter); plate.setStyleSheet("background:#fff6db;border:1px solid #ffc34d;border-radius:8px;padding:13px;color:#8a4b00;"); card_box.addWidget(plate); self.lane_plate.append(plate)
                 actions = QHBoxLayout(); enter = QPushButton("↪  Vào"); enter.setObjectName("success"); enter.clicked.connect(self.record_entry); exit_button = QPushButton("↩  Ra"); exit_button.setObjectName("danger"); exit_button.clicked.connect(self.record_exit); actions.addWidget(enter); actions.addWidget(exit_button); card_box.addLayout(actions); grid.addWidget(card, index // 2, index % 2)
             box.addLayout(grid); box.addStretch(); return page
 
@@ -170,13 +194,212 @@ def launch(settings: Settings) -> int:
             refresh.clicked.connect(load); search.textChanged.connect(filter_rows); load(); return page
 
         def fee_page(self) -> QWidget:
-            page, box = self.page(); row = QHBoxLayout(); h = label("Quản lý biểu phí", bold=True); h.setStyleSheet("font-size:24px;"); row.addWidget(h); row.addStretch(); row.addWidget(QPushButton("+ Thêm quy tắc")); box.addLayout(row); grid = QGridLayout()
-            try: rules = asyncio.run(_fee_rules(settings))
+            page, box = self.page(); row = QHBoxLayout(); h = label("Quản lý biểu phí", bold=True); h.setStyleSheet("font-size:24px;"); row.addWidget(h); row.addStretch(); add = QPushButton("+ Thêm quy tắc"); add.setObjectName("primary"); add.clicked.connect(self.add_fee_rule); row.addWidget(add); box.addLayout(row); grid = QGridLayout()
+            try:
+                rules = asyncio.run(_fee_rules(settings))
+                vehicle_names = asyncio.run(_vehicle_name_map(settings))
             except Exception: rules = []
             for index, rule in enumerate(rules):
-                frame = QFrame(); frame.setObjectName("card"); c = QVBoxLayout(frame); c.addWidget(label(f"◆  {rule.name}", bold=True)); c.addWidget(label("ĐANG ÁP DỤNG" if rule.is_active else "ĐÃ TẮT", "badge", True)); c.addSpacing(8); c.addWidget(label(f"Giá mỗi block: {rule.price_per_block:,} đ")); c.addWidget(label(f"Block: {rule.block_minutes} phút", "muted")); c.addWidget(label(f"Miễn phí: {rule.free_minutes} phút", "muted")); c.addWidget(QPushButton("Chỉnh sửa")); grid.addWidget(frame, index // 3, index % 3)
+                frame = QFrame(); frame.setObjectName("card"); c = QVBoxLayout(frame); c.addWidget(label(f"◆  {rule.name}", bold=True)); c.addWidget(label(vehicle_names.get(rule.vehicle_type, rule.vehicle_type), "muted")); c.addWidget(label("ĐANG ÁP DỤNG" if rule.is_active else "ĐÃ TẮT", "badge", True)); c.addSpacing(8); c.addWidget(label(f"Giá mỗi block: {rule.price_per_block:,} đ")); c.addWidget(label(f"Block: {rule.block_minutes} phút", "muted")); c.addWidget(label(f"Miễn phí: {rule.free_minutes} phút", "muted")); actions = QHBoxLayout(); edit = QPushButton("✎ Sửa"); delete = QPushButton("Xóa"); delete.setObjectName("danger"); edit.clicked.connect(lambda _=False, item=rule: self.edit_fee_rule(item)); delete.clicked.connect(lambda _=False, item=rule: self.delete_fee_rule(item)); actions.addWidget(edit); actions.addWidget(delete); c.addLayout(actions); grid.addWidget(frame, index // 3, index % 3)
             if not rules: box.addWidget(label("Chưa có biểu phí.", "muted"))
             box.addLayout(grid); box.addStretch(); return page
+
+        def subscriber_page(self) -> QWidget:
+            page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thuê bao", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thuê bao"); add.setObjectName("primary"); add.clicked.connect(self.add_subscriber); row.addWidget(add); box.addLayout(row)
+            self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "Loại xe", "Hiệu lực đến", "Trạng thái", "Thao tác"]); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
+
+        def card_page(self) -> QWidget:
+            page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thẻ RFID", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thẻ"); add.setObjectName("primary"); add.clicked.connect(self.add_card); row.addWidget(add); box.addLayout(row)
+            self.card_table = self.make_table(["Mã thẻ (UID)", "Thuê bao", "Xe", "Trạng thái", "Thao tác"]); box.addWidget(self.card_table, 1); self.load_cards(); return page
+
+        def load_cards(self) -> None:
+            if not hasattr(self, "card_table"): return
+            try: cards = asyncio.run(_card_display_rows(settings))
+            except Exception: return
+            self.card_table.setRowCount(len(cards))
+            for r, (card, subscriber_name) in enumerate(cards):
+                for c, value in enumerate((card.rfid_code, subscriber_name, "—", "Hoạt động" if card.is_active else "Đã khóa")): self.card_table.setItem(r, c, QTableWidgetItem(str(value)))
+                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2); toggle = QPushButton("Khóa" if card.is_active else "Mở"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); toggle.clicked.connect(lambda _=False, item=card: self.toggle_card(item)); remove.clicked.connect(lambda _=False, item=card: self.delete_card(item)); actions_row.addWidget(toggle); actions_row.addWidget(remove); self.card_table.setCellWidget(r, 4, actions)
+
+        def add_card(self) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm thẻ RFID", 560); form = QFormLayout(); content.addLayout(form); uid, subscriber = QLineEdit(), QComboBox(); uid.setPlaceholderText("Quét hoặc nhập mã UID")
+            try:
+                for item in asyncio.run(_subscriber_entities(settings)): subscriber.addItem(f"{item.full_name} — {item.phone}", item.id)
+            except Exception: pass
+            form.addRow("Mã thẻ UID *", uid); form.addRow("Gán thuê bao", subscriber); cancel, save = QPushButton("Hủy"), QPushButton("Lưu thẻ"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_card() -> None:
+                try: asyncio.run(_create_card(settings, uid.text(), subscriber.currentData())); self.load_cards(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_card); dialog.exec()
+
+        def toggle_card(self, card) -> None:
+            try: asyncio.run(_set_card_active(settings, card.id, not card.is_active)); self.load_cards()
+            except Exception as exc: QMessageBox.warning(self, "Không cập nhật được", str(exc))
+
+        def delete_card(self, card) -> None:
+            if QMessageBox.question(self, "Xóa thẻ", f"Xóa mềm thẻ {card.rfid_code}?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_card(settings, card.id)); self.load_cards()
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
+
+        def lane_page(self) -> QWidget:
+            page, box = self.page(); row = QHBoxLayout(); title = label("Cấu hình làn xe", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm làn"); add.setObjectName("primary"); add.clicked.connect(self.add_lane); row.addWidget(add); box.addLayout(row)
+            self.lane_table = self.make_table(["Tên làn", "Hướng", "Camera", "RFID", "Barrier", "Trạng thái", "Thao tác"]); box.addWidget(self.lane_table, 1); self.load_lanes(); return page
+
+        def load_lanes(self) -> None:
+            try: lanes = asyncio.run(_lanes(settings))
+            except Exception: return
+            self.lane_table.setRowCount(len(lanes))
+            for r, lane in enumerate(lanes):
+                for c, value in enumerate((lane.name, lane.direction, lane.camera_source or "—", lane.rfid_device_id or "—", lane.barrier_device_id or "—", "Hoạt động" if lane.is_active else "Tắt")): self.lane_table.setItem(r, c, QTableWidgetItem(str(value)))
+                actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
+                edit, remove = QPushButton("✎ Sửa"), QPushButton("Xóa"); remove.setObjectName("danger")
+                edit.clicked.connect(lambda _=False, item=lane: self.edit_lane(item)); remove.clicked.connect(lambda _=False, item=lane: self.delete_lane(item))
+                action_row.addWidget(edit); action_row.addWidget(remove); self.lane_table.setCellWidget(r, 6, actions)
+
+        def add_lane(self) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm làn xe", 560); form = QFormLayout(); content.addLayout(form); name, direction, camera, rfid, barrier = QLineEdit(), QComboBox(), QLineEdit(), QLineEdit(), QLineEdit(); direction.addItems(["IN", "OUT", "BIDIRECTIONAL"])
+            form.addRow("Tên làn *", name); form.addRow("Hướng", direction); form.addRow("Nguồn camera", camera); form.addRow("Thiết bị RFID", rfid); form.addRow("Thiết bị barrier", barrier); cancel, save = QPushButton("Hủy"), QPushButton("Lưu làn"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_lane() -> None:
+                try: asyncio.run(_create_lane(settings, name.text(), direction.currentText(), camera.text() or None, rfid.text() or None, barrier.text() or None)); self.load_lanes(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_lane); dialog.exec()
+
+        def edit_lane(self, lane) -> None:
+            dialog, content, footer = modal_shell(self, "Cấu hình làn xe", 560); form = QFormLayout(); content.addLayout(form)
+            name, direction, camera, rfid, barrier = QLineEdit(lane.name), QComboBox(), QLineEdit(lane.camera_source or ""), QLineEdit(lane.rfid_device_id or ""), QLineEdit(lane.barrier_device_id or "")
+            direction.addItems(["IN", "OUT", "BIDIRECTIONAL"]); direction.setCurrentText(lane.direction)
+            form.addRow("Tên làn *", name); form.addRow("Hướng", direction); form.addRow("Nguồn camera", camera); form.addRow("Thiết bị RFID", rfid); form.addRow("Thiết bị barrier", barrier)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu cấu hình"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_lane() -> None:
+                try:
+                    asyncio.run(_update_lane(settings, lane.id, name.text(), direction.currentText(), camera.text() or None, rfid.text() or None, barrier.text() or None, lane.is_active))
+                    self.load_lanes(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_lane); dialog.exec()
+
+        def delete_lane(self, lane) -> None:
+            if QMessageBox.question(self, "Xóa làn", f"Xóa mềm làn '{lane.name}'?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_lane(settings, lane.id)); self.load_lanes()
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
+
+        def load_subscribers(self) -> None:
+            if not hasattr(self, "subscriber_table"): return
+            try:
+                rows = asyncio.run(_subscriber_entities(settings))
+                vehicle_names = asyncio.run(_vehicle_name_map(settings))
+            except Exception: return
+            self.subscriber_table.setRowCount(len(rows))
+            for r, item in enumerate(rows):
+                for c, value in enumerate((item.full_name, item.phone, vehicle_names.get(item.vehicle_type, item.vehicle_type), item.valid_until.isoformat(), "Hoạt động" if item.is_active else "Đã khóa")): self.subscriber_table.setItem(r, c, QTableWidgetItem(str(value)))
+                actions = QWidget(); row = QHBoxLayout(actions); row.setContentsMargins(4, 2, 4, 2); edit = QPushButton("Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger"); edit.clicked.connect(lambda _=False, subscriber=item: self.edit_subscriber(subscriber)); remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber)); row.addWidget(edit); row.addWidget(remove); self.subscriber_table.setCellWidget(r, 5, actions)
+
+        def add_subscriber(self) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm thuê bao", 680); form = QFormLayout(); content.addLayout(form)
+            name, phone, email, vehicle, start, end, rfid = QLineEdit(), QLineEdit(), QLineEdit(), QComboBox(), QLineEdit(date.today().isoformat()), QLineEdit(date.today().replace(year=date.today().year + 1).isoformat()), QLineEdit(); self.fill_vehicle_combo(vehicle)
+            form.addRow("Họ và tên *", name); form.addRow("Số điện thoại *", phone); form.addRow("Email", email); form.addRow("Loại xe", vehicle); form.addRow("Hiệu lực từ (YYYY-MM-DD)", start); form.addRow("Hiệu lực đến (YYYY-MM-DD)", end); form.addRow("Mã thẻ RFID (tùy chọn)", rfid)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thuê bao"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_subscriber() -> None:
+                try:
+                    asyncio.run(_create_subscriber(settings, name.text(), phone.text(), email.text() or None, vehicle.currentData(), start.text(), end.text(), rfid.text() or None)); self.load_subscribers(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_subscriber); dialog.exec()
+
+        def edit_subscriber(self, subscriber) -> None:
+            dialog, content, footer = modal_shell(self, "Sửa thuê bao", 620); form = QFormLayout(); content.addLayout(form)
+            name, phone, email, vehicle, start, end = QLineEdit(subscriber.full_name), QLineEdit(subscriber.phone), QLineEdit(subscriber.email or ""), QComboBox(), QLineEdit(subscriber.valid_from.isoformat()), QLineEdit(subscriber.valid_until.isoformat()); self.fill_vehicle_combo(vehicle); vehicle.setCurrentIndex(max(0, vehicle.findData(subscriber.vehicle_type)))
+            form.addRow("Họ tên", name); form.addRow("Số điện thoại", phone); form.addRow("Email", email); form.addRow("Loại xe", vehicle); form.addRow("Hiệu lực từ", start); form.addRow("Hiệu lực đến", end)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_item() -> None:
+                try: asyncio.run(_update_subscriber(settings, subscriber.id, name.text(), phone.text(), email.text() or None, vehicle.currentData(), start.text(), end.text(), subscriber.is_active)); self.load_subscribers(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_item); dialog.exec()
+
+        def delete_subscriber(self, subscriber) -> None:
+            if QMessageBox.question(self, "Xóa thuê bao", f"Xóa mềm thuê bao '{subscriber.full_name}'?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_subscriber(settings, subscriber.id)); self.load_subscribers()
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
+
+        def add_fee_rule(self) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm quy tắc phí", 620); form = QFormLayout(); content.addLayout(form)
+            name, vehicle, block, price, free, surcharge, maximum = QLineEdit(), QComboBox(), QLineEdit("60"), QLineEdit("5000"), QLineEdit("0"), QLineEdit("0"), QLineEdit(); self.fill_vehicle_combo(vehicle)
+            form.addRow("Tên quy tắc *", name); form.addRow("Loại xe", vehicle); form.addRow("Block tính (phút)", block); form.addRow("Giá mỗi block (VND)", price); form.addRow("Miễn phí (phút)", free); form.addRow("Phụ thu đêm (VND)", surcharge); form.addRow("Trần/ngày (VND, tùy chọn)", maximum)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu quy tắc"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_rule() -> None:
+                try:
+                    asyncio.run(_create_fee_rule(settings, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None)); dialog.accept(); self.reload_page("fees")
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_rule); dialog.exec()
+
+        def edit_fee_rule(self, rule) -> None:
+            dialog, content, footer = modal_shell(self, "Sửa quy tắc phí", 560); form = QFormLayout(); content.addLayout(form)
+            name, vehicle, price, block, free = QLineEdit(rule.name), QComboBox(), QLineEdit(str(rule.price_per_block)), QLineEdit(str(rule.block_minutes)), QLineEdit(str(rule.free_minutes)); self.fill_vehicle_combo(vehicle); vehicle.setCurrentIndex(max(0, vehicle.findData(rule.vehicle_type))); form.addRow("Tên", name); form.addRow("Loại xe", vehicle); form.addRow("Giá/block", price); form.addRow("Block (phút)", block); form.addRow("Miễn phí (phút)", free)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_rule() -> None:
+                try: asyncio.run(_update_fee_rule(settings, rule.id, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), rule.day_max)); dialog.accept(); self.reload_page("fees")
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_rule); dialog.exec()
+
+        def delete_fee_rule(self, rule) -> None:
+            if QMessageBox.question(self, "Xóa biểu phí", f"Xóa mềm quy tắc '{rule.name}'?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_fee_rule(settings, rule.id)); self.reload_page("fees")
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
+
+        def fill_vehicle_combo(self, combo: QComboBox) -> None:
+            """Use configured vehicle types everywhere; display names stay user-friendly."""
+            combo.clear()
+            try:
+                for item in asyncio.run(_vehicle_types(settings)):
+                    combo.addItem(item.display_name, item.code)
+            except Exception as exc:
+                QMessageBox.warning(self, "Không tải được loại xe", str(exc))
+
+        def vehicle_type_page(self) -> QWidget:
+            page, box = self.page()
+            row = QHBoxLayout(); title = label("Cấu hình loại xe", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch()
+            add = QPushButton("+ Thêm loại xe"); add.setObjectName("primary"); add.clicked.connect(self.add_vehicle_type); row.addWidget(add); box.addLayout(row)
+            box.addWidget(label("Các biểu mẫu thuê bao, biểu phí và xe vào đều dùng danh mục này.", "muted"))
+            self.vehicle_type_table = self.make_table(["Mã dùng trong hệ thống", "Tên hiển thị", "Thao tác"], 6); box.addWidget(self.vehicle_type_table, 1); self.load_vehicle_types()
+            return page
+
+        def load_vehicle_types(self) -> None:
+            if not hasattr(self, "vehicle_type_table"): return
+            try: rows = asyncio.run(_vehicle_types(settings))
+            except Exception as exc: QMessageBox.warning(self, "Không tải được loại xe", str(exc)); return
+            self.vehicle_type_table.setRowCount(len(rows))
+            for r, item in enumerate(rows):
+                self.vehicle_type_table.setItem(r, 0, QTableWidgetItem(item.code))
+                self.vehicle_type_table.setItem(r, 1, QTableWidgetItem(item.display_name))
+                actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
+                edit = QPushButton("✎ Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger")
+                edit.clicked.connect(lambda _=False, row=item: self.edit_vehicle_type(row)); remove.clicked.connect(lambda _=False, row=item: self.delete_vehicle_type(row))
+                action_row.addWidget(edit); action_row.addWidget(remove); self.vehicle_type_table.setCellWidget(r, 2, actions)
+
+        def vehicle_type_dialog(self, item=None) -> None:
+            dialog, content, footer = modal_shell(self, "Sửa loại xe" if item else "Thêm loại xe", 520)
+            form = QFormLayout(); content.addLayout(form)
+            code = QLineEdit(item.code if item else ""); name = QLineEdit(item.display_name if item else "")
+            code.setPlaceholderText("Ví dụ: electric_bike"); name.setPlaceholderText("Ví dụ: Xe đạp điện")
+            form.addRow("Mã loại xe *", code); form.addRow("Tên hiển thị *", name)
+            hint = label("Mã chỉ dùng để liên kết dữ liệu; người dùng sẽ luôn thấy tên hiển thị.", "muted"); hint.setWordWrap(True); content.addWidget(hint)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu loại xe"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_item() -> None:
+                try:
+                    if item: asyncio.run(_update_vehicle_type(settings, item.id, code.text(), name.text()))
+                    else: asyncio.run(_create_vehicle_type(settings, code.text(), name.text()))
+                    dialog.accept(); self.reload_page("vehicle_types")
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_item); dialog.exec()
+
+        def add_vehicle_type(self) -> None:
+            self.vehicle_type_dialog()
+
+        def edit_vehicle_type(self, item) -> None:
+            self.vehicle_type_dialog(item)
+
+        def delete_vehicle_type(self, item) -> None:
+            if QMessageBox.question(self, "Xóa loại xe", f"Xóa mềm loại xe '{item.display_name}'?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_vehicle_type(settings, item.id)); self.reload_page("vehicle_types")
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
 
         def accounts_page(self) -> QWidget:
             page, box = self.page(); header = QHBoxLayout(); h = label("Tài khoản & phân quyền", bold=True); h.setStyleSheet("font-size:24px;"); header.addWidget(h); header.addStretch(); roles = QPushButton("Vai trò & quyền"); roles.clicked.connect(self.manage_roles); header.addWidget(roles); create = QPushButton("+ Tạo tài khoản"); create.setObjectName("primary"); create.clicked.connect(self.create_account); header.addWidget(create); box.addLayout(header); self.user_table = self.make_table(["Tên đăng nhập", "Họ tên", "Vai trò", "Trạng thái"]); box.addWidget(self.user_table, 1); self.load_users(); return page
@@ -190,18 +413,22 @@ def launch(settings: Settings) -> int:
                 for c, value in enumerate((user.username, user.full_name, user.role, "Hoạt động" if user.is_active else "Đã khóa")): self.user_table.setItem(r, c, QTableWidgetItem(value))
 
         def create_account(self) -> None:
-            dialog = QDialog(self); dialog.setWindowTitle("Tạo tài khoản"); dialog.setStyleSheet(THEME); form = QFormLayout(dialog); username, full_name, password, role = QLineEdit(), QLineEdit(), QLineEdit(), QComboBox(); password.setEchoMode(QLineEdit.EchoMode.Password)
+            dialog, content, footer = modal_shell(self, "Tạo tài khoản", 520)
+            form = QFormLayout(); content.addLayout(form); username, full_name, password, role = QLineEdit(), QLineEdit(), QLineEdit(), QComboBox(); password.setEchoMode(QLineEdit.EchoMode.Password)
             try: role.addItems([item.name for item in asyncio.run(_roles(settings))])
             except Exception: role.addItems(["OPERATOR"])
-            form.addRow("Tên đăng nhập", username); form.addRow("Họ tên", full_name); form.addRow("Mật khẩu", password); form.addRow("Vai trò", role); buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save); buttons.accepted.connect(dialog.accept); buttons.rejected.connect(dialog.reject); form.addRow(buttons)
-            if dialog.exec() == QDialog.DialogCode.Accepted and username.text() and full_name.text() and password.text():
-                try: asyncio.run(_create_user(settings, username.text(), password.text(), full_name.text(), role.currentText())); self.load_users()
-                except Exception as exc: QMessageBox.warning(self, "Không tạo được", str(exc))
+            form.addRow("Tên đăng nhập", username); form.addRow("Họ tên", full_name); form.addRow("Mật khẩu", password); form.addRow("Vai trò", role)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu tài khoản"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_account() -> None:
+                if not username.text() or not full_name.text() or not password.text(): QMessageBox.warning(dialog, "Thiếu thông tin", "Nhập đủ tên đăng nhập, họ tên và mật khẩu."); return
+                try: asyncio.run(_create_user(settings, username.text(), password.text(), full_name.text(), role.currentText())); self.load_users(); dialog.accept()
+                except Exception as exc: QMessageBox.warning(dialog, "Không tạo được", str(exc))
+            save.clicked.connect(save_account); dialog.exec()
 
         def manage_roles(self) -> None:
             dialog = QDialog(self); dialog.setWindowTitle("Vai trò và quyền"); dialog.setMinimumSize(600, 520); dialog.setStyleSheet(THEME); box = QVBoxLayout(dialog)
             box.addWidget(label("Tạo hoặc chỉnh sửa vai trò", bold=True)); selector = QComboBox(); selector.addItem("+ Vai trò mới"); name, description = QLineEdit(), QLineEdit(); name.setPlaceholderText("Tên vai trò, ví dụ: CASHIER"); description.setPlaceholderText("Mô tả vai trò")
-            permissions = QListWidget(); permissions.setStyleSheet("background:#202134;border:1px solid #3a3b56;border-radius:8px;")
+            permissions = QListWidget(); permissions.setStyleSheet("background:#ffffff;color:#172033;border:1px solid #d8e1ec;border-radius:8px;")
             try:
                 catalog = asyncio.run(_permissions(settings)); role_records = asyncio.run(_roles(settings))
                 for record in role_records: selector.addItem(record.name, record)
@@ -231,9 +458,15 @@ def launch(settings: Settings) -> int:
             if not self.shift_id: QMessageBox.warning(self, "Chưa mở ca", "Hãy mở ca làm việc trước."); return
             plate, ok = QInputDialog.getText(self, "Xe vào", "Biển số xe:");
             if not ok or not plate.strip(): return
-            vehicle, ok = QInputDialog.getItem(self, "Loại xe", "Chọn loại xe:", ["motorbike", "car", "truck"], 0, False)
+            try:
+                vehicle_types = asyncio.run(_vehicle_types(settings))
+            except Exception as exc:
+                QMessageBox.warning(self, "Không tải được loại xe", str(exc)); return
+            labels = [item.display_name for item in vehicle_types]
+            vehicle, ok = QInputDialog.getItem(self, "Loại xe", "Chọn loại xe:", labels, 0, False)
             if not ok: return
-            try: asyncio.run(_entry(settings, plate.strip(), vehicle, self.shift_id)); self.refresh_live()
+            vehicle_code = next((item.code for item in vehicle_types if item.display_name == vehicle), None)
+            try: asyncio.run(_entry(settings, plate.strip(), vehicle_code, self.shift_id)); self.refresh_live()
             except Exception as exc: QMessageBox.warning(self, "Không thể ghi xe vào", str(exc))
 
         def record_exit(self) -> None:
@@ -294,6 +527,41 @@ async def _create_user(settings: Settings, username: str, password: str, full_na
         async with db.session() as session: await CreateUserUseCase(SQLiteUserRepository(session), PBKDF2PasswordHasher()).execute(CreateUserInput(settings.branch_id, username, password, full_name, role))
     finally: await db.dispose()
 
+async def _create_subscriber(settings: Settings, full_name: str, phone: str, email: str | None, vehicle_type: str, valid_from: str, valid_until: str, rfid_code: str | None) -> None:
+    if not full_name.strip() or not phone.strip(): raise ValueError("Họ tên và số điện thoại là bắt buộc")
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await RegisterSubscriberUseCase(SQLiteSubscriberRepository(session), SQLiteCardRepository(session)).execute(RegisterSubscriberInput(settings.branch_id, full_name.strip(), phone.strip(), vehicle_type, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, rfid_code))
+    finally: await db.dispose()
+
+async def _create_fee_rule(settings: Settings, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None) -> None:
+    if not name.strip(): raise ValueError("Tên quy tắc là bắt buộc")
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteFeeRuleRepository(session)
+            rule = FeeRuleInput(settings.branch_id, name.strip(), vehicle_type, free_minutes, block_minutes, price_per_block, day_max)
+            rule_id = await FeeRuleManagementUseCase(repo).create(rule)
+            created = await repo.get_by_id(rule_id)
+            if created is not None:
+                created.night_surcharge = night_surcharge or None
+                await repo.update(created)
+    finally: await db.dispose()
+
+async def _update_fee_rule(settings: Settings, rule_id: str, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, day_max: int | None) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await FeeRuleManagementUseCase(SQLiteFeeRuleRepository(session)).update(rule_id, FeeRuleInput(settings.branch_id, name, vehicle_type, free_minutes, block_minutes, price_per_block, day_max))
+    finally: await db.dispose()
+
+async def _delete_fee_rule(settings: Settings, rule_id: str) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: await FeeRuleManagementUseCase(SQLiteFeeRuleRepository(session)).delete(rule_id)
+    finally: await db.dispose()
+
 async def _stats(settings: Settings, shift_id: str | None) -> dict[str, object]:
     db = Database(settings.local_database_url)
     try:
@@ -317,11 +585,112 @@ async def _subscriber_rows(settings: Settings):
         return [(s.full_name, s.phone, s.vehicle_type, s.valid_until.isoformat(), "Hoạt động" if s.is_active else "Đã khóa") for s in rows]
     finally: await db.dispose()
 
+async def _subscriber_entities(settings: Settings):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: return await SQLiteSubscriberRepository(session).list_all()
+    finally: await db.dispose()
+
+async def _update_subscriber(settings: Settings, subscriber_id: str, full_name: str, phone: str, email: str | None, vehicle_type: str, valid_from: str, valid_until: str, is_active: bool) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).update(SubscriberUpdateInput(subscriber_id, full_name, phone, vehicle_type, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, is_active))
+    finally: await db.dispose()
+
+async def _delete_subscriber(settings: Settings, subscriber_id: str) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: await SubscriberManagementUseCase(SQLiteSubscriberRepository(session)).delete(subscriber_id)
+    finally: await db.dispose()
+
 async def _card_rows(settings: Settings):
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session: rows = await SQLiteCardRepository(session).list_all()
         return [(c.rfid_code, c.subscriber_id or "—", c.vehicle_id or "—", "Hoạt động" if c.is_active else "Đã khóa") for c in rows]
+    finally: await db.dispose()
+
+async def _card_entities(settings: Settings):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: return await SQLiteCardRepository(session).list_all()
+    finally: await db.dispose()
+
+async def _card_display_rows(settings: Settings):
+    """Resolve internal foreign keys to end-user labels before rendering UI."""
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            cards = await SQLiteCardRepository(session).list_all()
+            subscribers = {item.id: item for item in await SQLiteSubscriberRepository(session).list_all()}
+        rows = []
+        for card in cards:
+            subscriber = subscribers.get(card.subscriber_id or "")
+            display = f"{subscriber.full_name} · {subscriber.phone}" if subscriber else "Chưa gán thuê bao"
+            rows.append((card, display))
+        return rows
+    finally: await db.dispose()
+
+async def _create_card(settings: Settings, rfid_code: str, subscriber_id: str | None) -> None:
+    if not rfid_code.strip(): raise ValueError("Mã UID là bắt buộc")
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteCardRepository(session)
+            if await repo.get_by_rfid_code(rfid_code.strip()): raise ValueError("Mã UID đã tồn tại")
+            await repo.create(Card(branch_id=settings.branch_id, rfid_code=rfid_code.strip(), subscriber_id=subscriber_id))
+    finally: await db.dispose()
+
+async def _set_card_active(settings: Settings, card_id: str, active: bool) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteCardRepository(session); card = await repo.get_by_id(card_id)
+            if card is None: raise ValueError("Không tìm thấy thẻ")
+            card.is_active = active; await repo.update(card)
+    finally: await db.dispose()
+
+async def _delete_card(settings: Settings, card_id: str) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: await SQLiteCardRepository(session).delete(card_id)
+    finally: await db.dispose()
+
+async def _lanes(settings: Settings):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: return await SQLiteLaneRepository(session).list_active()
+    finally: await db.dispose()
+
+async def _create_lane(settings: Settings, name: str, direction: str, camera: str | None, rfid: str | None, barrier: str | None) -> None:
+    if not name.strip(): raise ValueError("Tên làn là bắt buộc")
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await SQLiteLaneRepository(session).create(Lane(branch_id=settings.branch_id, name=name.strip(), direction=direction, camera_source=camera, rfid_device_id=rfid, barrier_device_id=barrier))
+    finally: await db.dispose()
+
+async def _update_lane(settings: Settings, lane_id: str, name: str, direction: str, camera: str | None, rfid: str | None, barrier: str | None, is_active: bool) -> None:
+    if not name.strip(): raise ValueError("Tên làn là bắt buộc")
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteLaneRepository(session); lane = await repo.get_by_id(lane_id)
+            if lane is None: raise ValueError("Không tìm thấy làn")
+            lane.name, lane.direction = name.strip(), direction
+            lane.camera_source, lane.rfid_device_id, lane.barrier_device_id, lane.is_active = camera, rfid, barrier, is_active
+            await repo.update(lane)
+    finally: await db.dispose()
+
+async def _delete_lane(settings: Settings, lane_id: str) -> None:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            active_sessions = await SQLiteSessionRepository(session).list_recent(settings.branch_id, 10000)
+            if any(item.status == "ACTIVE" and item.lane_in_id == lane_id for item in active_sessions):
+                raise ValueError("Không thể xóa làn đang có xe trong bãi")
+            await SQLiteLaneRepository(session).delete(lane_id)
     finally: await db.dispose()
 
 async def _shift_rows(settings: Settings):
@@ -344,6 +713,36 @@ async def _fee_rules(settings: Settings):
         async with db.session() as session: return await SQLiteFeeRuleRepository(session).list_all()
     finally: await db.dispose()
 
+async def _vehicle_types(settings: Settings):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session: return await SQLiteVehicleTypeRepository(session).list_all()
+    finally: await db.dispose()
+
+async def _vehicle_name_map(settings: Settings) -> dict[str, str]:
+    return {item.code: item.display_name for item in await _vehicle_types(settings)}
+
+async def _create_vehicle_type(settings: Settings, code: str, display_name: str):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            return await SQLiteVehicleTypeRepository(session).create(code, display_name)
+    finally: await db.dispose()
+
+async def _update_vehicle_type(settings: Settings, item_id: str, code: str, display_name: str):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            return await SQLiteVehicleTypeRepository(session).update(item_id, code, display_name)
+    finally: await db.dispose()
+
+async def _delete_vehicle_type(settings: Settings, item_id: str):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            await SQLiteVehicleTypeRepository(session).delete(item_id)
+    finally: await db.dispose()
+
 async def _roles(settings: Settings):
     db = Database(settings.local_database_url)
     try:
@@ -355,6 +754,18 @@ async def _permissions(settings: Settings):
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session: return await SQLiteAuthorizationRepository(session).list_permissions()
+    finally: await db.dispose()
+
+async def _role_permissions(settings: Settings, role_name: str) -> set[str]:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteAuthorizationRepository(session)
+            await repo.ensure_starter_roles()
+            for role in await repo.list_roles():
+                if role.name == role_name:
+                    return set(role.permission_codes)
+            return set()
     finally: await db.dispose()
 
 async def _save_role(settings: Settings, name: str, description: str, codes: set[str]):
