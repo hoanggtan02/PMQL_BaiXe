@@ -504,9 +504,59 @@ def launch(settings: Settings) -> int:
             buttons.accepted.connect(save); box.addWidget(buttons); dialog.exec()
 
         def open_shift(self) -> None:
-            try: self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id")))
-            except Exception as exc: QMessageBox.warning(self, "Không thể mở ca", str(exc)); return
-            self.operation_note.setText("● Ca đang mở — các phiên xe vào sẽ được tính vào ca này."); self.shift_button.setText("✓ Ca đang hoạt động"); self.refresh_live()
+            dialog, content, footer = modal_shell(self, "Mở ca làm việc", 740)
+            content.addWidget(label("Chọn ca làm việc", "muted"))
+            preset_layout = QHBoxLayout()
+            presets = [("Ca sáng", "06:00 - 14:00", "8 tiếng", "🌅"), ("Ca chiều", "14:00 - 22:00", "8 tiếng", "🌞"), ("Ca đêm", "22:00 - 06:00", "8 tiếng", "🌙"), ("Ca ngày đủ", "07:00 - 19:00", "12 tiếng", "📋")]
+            self.selected_preset = presets[0]
+            preset_buttons = []
+            for name, time, dur, icon in presets:
+                btn = QPushButton(); btn.setCheckable(True)
+                btn.setStyleSheet("QPushButton { background: #ffffff; border: 1px solid #d8e1ec; border-radius: 10px; padding: 10px; } QPushButton:checked { border: 2px solid #ff7a1a; background: #fff0e4; }")
+                vbox = QVBoxLayout(btn); icon_lbl = label(icon); icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); icon_lbl.setStyleSheet("font-size: 24px;")
+                name_lbl = label(name, bold=True); name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); time_lbl = label(time, "muted"); time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                dur_lbl = label(dur); dur_lbl.setStyleSheet("color:#ff7a1a; font-size:11px;"); dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                vbox.addWidget(icon_lbl); vbox.addWidget(name_lbl); vbox.addWidget(time_lbl); vbox.addWidget(dur_lbl)
+                def on_click(checked, p=(name, time, dur, icon), button=btn):
+                    if checked:
+                        for b in preset_buttons:
+                            if b != button: b.setChecked(False)
+                        self.selected_preset = p; update_summary()
+                btn.clicked.connect(on_click); preset_buttons.append(btn); preset_layout.addWidget(btn)
+            preset_buttons[0].setChecked(True); content.addLayout(preset_layout); content.addSpacing(15)
+            grid = QGridLayout()
+            grid.addWidget(label("Làn phụ trách", "muted"), 0, 0); lane_cb = QComboBox(); lane_cb.addItem("-- Tất cả làn --")
+            try:
+                for ln in asyncio.run(_lanes(settings)): lane_cb.addItem(ln.name)
+            except Exception: pass
+            grid.addWidget(lane_cb, 1, 0); grid.addWidget(label("Loại ca", "muted"), 0, 1); type_cb = QComboBox()
+            for name, time, _, _ in presets: type_cb.addItem(f"{name} ({time})")
+            grid.addWidget(type_cb, 1, 1); grid.addWidget(label("Tiền đầu ca (VNĐ)", "muted"), 2, 0); cash_cb = QComboBox(); cash_cb.addItems(["Không có tiền đầu ca", "500.000 đ", "1.000.000 đ", "2.000.000 đ", "5.000.000 đ", "Số tiền khác..."])
+            grid.addWidget(cash_cb, 3, 0); grid.addWidget(label("Ghi chú bổ sung", "muted"), 2, 1); note_cb = QComboBox(); note_cb.addItems(["-- Không có ghi chú --", "Bàn giao với ca trước", "Bàn giao cho ca sau", "Thiết bị cần kiểm tra", "Có sự cố cần báo cáo", "Ngày lễ - lưu lượng cao", "Ca cuối tuần"])
+            grid.addWidget(note_cb, 3, 1); content.addLayout(grid); content.addSpacing(15)
+            summary_frame = QFrame(); summary_frame.setStyleSheet("background: #f4f8fb; border-radius: 8px; border: 1px dashed #c0d1e1;")
+            sum_vbox = QVBoxLayout(summary_frame); title_lbl = label("ℹ Thông tin ca sẽ mở", bold=True); title_lbl.setStyleSheet("color: #2b6cb0; margin-bottom: 5px;")
+            sum_vbox.addWidget(title_lbl); sum_type = label("Loại ca: Ca sáng"); sum_lane = label("Làn: -- Tất cả làn --"); sum_note = label("Ghi chú: Ca sáng (06:00-14:00)")
+            sum_vbox.addWidget(sum_type); sum_vbox.addWidget(sum_lane); sum_vbox.addWidget(sum_note); content.addWidget(summary_frame)
+            def update_summary():
+                sum_type.setText(f"Loại ca: <b>{self.selected_preset[0]}</b>")
+                sum_lane.setText(f"Làn: <b>{lane_cb.currentText()}</b>")
+                sum_note.setText(f"Ghi chú: <b>{self.selected_preset[0]} ({self.selected_preset[1]})</b>")
+                type_cb.setCurrentText(f"{self.selected_preset[0]} ({self.selected_preset[1]})")
+            lane_cb.currentTextChanged.connect(update_summary)
+            def type_changed(txt):
+                for b, p in zip(preset_buttons, presets):
+                    if p[0] in txt:
+                        b.setChecked(True)
+                        self.selected_preset = p
+                        update_summary()
+            type_cb.currentTextChanged.connect(type_changed); update_summary()
+            cancel, save = QPushButton("Hủy"), QPushButton("▶ Mở ca ngay"); save.setObjectName("success"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def do_open():
+                try: self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id")))
+                except Exception as exc: QMessageBox.warning(dialog, "Không thể mở ca", str(exc)); return
+                self.operation_note.setText("● Ca đang mở — các phiên xe vào sẽ được tính vào ca này."); self.shift_button.setText("✓ Ca đang hoạt động"); self.refresh_live(); dialog.accept()
+            save.clicked.connect(do_open); dialog.exec()
 
         def record_entry(self, lane_id: str) -> None:
             if not self.shift_id: QMessageBox.warning(self, "Chưa mở ca", "Hãy mở ca làm việc trước."); return
