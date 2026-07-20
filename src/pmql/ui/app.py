@@ -173,7 +173,7 @@ def launch(settings: Settings) -> int:
             self.go("overview")
 
         def build_sidebar(self) -> QWidget:
-            side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(220); box = QVBoxLayout(side); box.setContentsMargins(12, 20, 12, 16)
+            side = QFrame(); side.setObjectName("sidebar"); side.setMinimumWidth(240); side.setMaximumWidth(260); box = QVBoxLayout(side); box.setContentsMargins(12, 20, 12, 16)
             box.addWidget(label("P  PMQL BÃI XE", bold=True)); box.addWidget(label("Hệ thống quản lý bãi xe", "muted")); box.addSpacing(18)
             groups = [("", [("overview", "▦  Tổng quan"), ("operations", "⚑  Vận hành làn"), ("sessions", "◌  Phiên gửi xe"), ("alerts", "▲  Cảnh báo"), ("shifts", "◴  Ca làm việc")]), ("QUẢN LÝ", [("subscribers", "▣  Thuê bao"), ("cards", "▤  Thẻ xe"), ("fees", "◆  Biểu phí"), ("lanes", "⚙  Cấu hình làn"), ("vehicle_types", "▧  Loại xe")]), ("HỆ THỐNG", [("accounts", "♙  Tài khoản & phân quyền"), ("settings", "⚙  Cài đặt"), ("hardware", "🔌  Kết nối thiết bị")])]
             for group, links in groups:
@@ -460,7 +460,7 @@ def launch(settings: Settings) -> int:
                 dialog.accept()
             save.clicked.connect(do_close); dialog.exec()
 
-        def make_table(self, headers: list[str], minimum_rows: int = 10, action_col_width: int = 160) -> QTableWidget:
+        def make_table(self, headers: list[str], minimum_rows: int = 10, action_col_width: int = 200) -> QTableWidget:
             from PySide6.QtCore import Qt as _Qt
             table = QTableWidget(0, len(headers))
             table.setHorizontalHeaderLabels(headers)
@@ -471,6 +471,7 @@ def launch(settings: Settings) -> int:
             table.setMinimumHeight(max(220, minimum_rows * 38))
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             hdr = table.horizontalHeader()
+            hdr.setMinimumSectionSize(120)
             for i in range(len(headers) - 1):
                 hdr.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
             # Last column is always the action column - fixed width
@@ -781,8 +782,8 @@ def launch(settings: Settings) -> int:
                 ]
                 for c, value in enumerate(row_data): self.shift_table.setItem(r, c, QTableWidgetItem(str(value)))
                 actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2)
-                edit = QPushButton("Sửa"); edit.clicked.connect(lambda _=False, item=s: self.edit_shift(item)); actions_row.addWidget(edit)
-                remove = QPushButton("Xóa"); remove.setObjectName("danger"); remove.clicked.connect(lambda _=False, item=s: self.delete_shift(item)); actions_row.addWidget(remove)
+                edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE); edit.clicked.connect(lambda _=False, item=s: self.edit_shift(item)); actions_row.addWidget(edit)
+                remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE); remove.clicked.connect(lambda _=False, item=s: self.delete_shift(item)); actions_row.addWidget(remove)
                 self.shift_table.setCellWidget(r, 9, actions)
                 
             open_shifts = [s for s in shifts if s.status == "OPEN"]
@@ -1616,11 +1617,11 @@ def launch(settings: Settings) -> int:
                 
                 # Actions
                 actions = QHBoxLayout()
-                edit = QPushButton("📝 Sửa cấu hình")
+                edit = icon_btn("fa5s.edit", "Sửa cấu hình", _BTN_EDIT_STYLE)
                 edit.setStyleSheet("background: white; border: 1px solid #93c5fd; color: #2563eb; border-radius: 6px; padding: 8px; font-weight: bold;")
                 edit.clicked.connect(lambda _=False, item=lane: self.edit_lane(item))
                 
-                remove = QPushButton("🗑")
+                remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
                 remove.setStyleSheet("background: white; border: 1px solid #fca5a5; color: #dc2626; border-radius: 6px; padding: 8px 14px;")
                 remove.clicked.connect(lambda _=False, item=lane: self.delete_lane(item))
                 
@@ -1878,7 +1879,7 @@ def launch(settings: Settings) -> int:
                 self.vehicle_type_table.setItem(r, 0, QTableWidgetItem(item.code))
                 self.vehicle_type_table.setItem(r, 1, QTableWidgetItem(item.display_name))
                 actions = QWidget(); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
-                edit = QPushButton("✎ Sửa"); remove = QPushButton("Xóa"); remove.setObjectName("danger")
+                edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE); remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
                 edit.clicked.connect(lambda _=False, row=item: self.edit_vehicle_type(row)); remove.clicked.connect(lambda _=False, row=item: self.delete_vehicle_type(row))
                 action_row.addWidget(edit); action_row.addWidget(remove); self.vehicle_type_table.setCellWidget(r, 2, actions)
 
