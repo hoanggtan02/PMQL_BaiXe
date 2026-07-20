@@ -879,31 +879,60 @@ def launch(settings: Settings) -> int:
             try: asyncio.run(_delete_shift(settings, shift.id)); self.load_shifts()
             except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
 
+        def show_fee_history(self):
+            dialog, content, footer = modal_shell(self, "Lịch sử các quy tắc phí", 800)
+            from PySide6.QtGui import QColor as _QColor
+            hist_tbl = self.make_table(
+                ["Quy tắc", "Loại xe", "Giá/block", "Block", "Miễn phí", "Trần/ngày", "Trạng thái"],
+                action_col_width=130
+            )
+            try:
+                snap_rules = asyncio.run(_fee_rules(settings))
+                snap_names = asyncio.run(_vehicle_name_map(settings))
+                hist_tbl.setRowCount(len(snap_rules))
+                for ri, sr in enumerate(snap_rules):
+                    vals = (
+                        sr.name,
+                        snap_names.get(sr.vehicle_type, sr.vehicle_type),
+                        f"{sr.price_per_block:,} đ",
+                        f"{sr.block_minutes} phút",
+                        f"{sr.free_minutes} phút",
+                        f"{sr.day_max:,} đ" if sr.day_max else "--",
+                    )
+                    for ci, val in enumerate(vals):
+                        itm = QTableWidgetItem(val)
+                        itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        hist_tbl.setItem(ri, ci, itm)
+                    status_itm = QTableWidgetItem(
+                        "Đang áp dụng" if sr.is_active else "Đã tắt"
+                    )
+                    status_itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    status_itm.setForeground(
+                        _QColor("#166534" if sr.is_active else "#94a3b8")
+                    )
+                    hist_tbl.setItem(ri, 6, status_itm)
+            except Exception:
+                pass
+            content.addWidget(hist_tbl)
+            close = QPushButton("Đóng"); close.clicked.connect(dialog.reject)
+            footer.addStretch(); footer.addWidget(close)
+            dialog.exec()
+
         def fee_page(self) -> QWidget:
             page, box = self.page()
-            box.setSpacing(12)
-
+            
             # Header
             hrow = QHBoxLayout()
-            h = label("Quan ly bieu phi", bold=True); h.setStyleSheet("font-size:24px;")
-            hrow.addWidget(h); hrow.addStretch()
-            add_btn = icon_btn("fa5s.plus", "Them quy tac", _BTN_EDIT_STYLE)
+            hist_btn = icon_btn("fa5s.history", "Lịch sử thay đổi", "QPushButton { background: white; color: #64748b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; } QPushButton:hover { background: #f1f5f9; }")
+            hist_btn.clicked.connect(self.show_fee_history)
+            hrow.addWidget(hist_btn); hrow.addStretch()
+            
+            add_btn = icon_btn("fa5s.plus", "Thêm quy tắc phí", _BTN_EDIT_STYLE.replace("#3b82f6", "#f97316")) # Orange
             add_btn.clicked.connect(self.add_fee_rule)
             hrow.addWidget(add_btn)
             box.addLayout(hrow)
 
-            # Tabs
-            tabs = QTabWidget()
-            tabs.setStyleSheet(
-                "QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 8px; background: white; }"
-                "QTabBar::tab { padding: 8px 20px; font-weight: 600; color: #64748b; border: 1px solid #e2e8f0;"
-                " border-bottom: none; border-radius: 6px 6px 0 0; background: #f1f5f9; margin-right: 4px; }"
-                "QTabBar::tab:selected { background: white; color: #1e293b; }"
-            )
-
-            # Tab 1: Rule cards
-            rules_tab = QWidget(); rules_layout = QVBoxLayout(rules_tab)
-            rules_layout.setContentsMargins(12, 12, 12, 12)
+            # Grid of rules
             try:
                 rules = asyncio.run(_fee_rules(settings))
                 vehicle_names = asyncio.run(_vehicle_name_map(settings))
@@ -920,137 +949,113 @@ def launch(settings: Settings) -> int:
             for index, rule in enumerate(rules):
                 f = QFrame(); f.setObjectName("fee_card")
                 is_active = rule.is_active
-                border_color = "#3b82f6" if is_active else "#e2e8f0"
+                border_color = "#facc15" if is_active else "#e2e8f0"
                 f.setStyleSheet(
-                    f"QFrame#fee_card {{ background: white; border: 2px solid {border_color};"
-                    " border-radius: 10px; }}"
+                    f"QFrame#fee_card {{ background: white; border: 1px solid {border_color};"
+                    f" border-radius: 8px; }}"
                 )
-                c = QVBoxLayout(f); c.setSpacing(6); c.setContentsMargins(16, 14, 16, 14)
+                c = QVBoxLayout(f); c.setSpacing(12); c.setContentsMargins(16, 14, 16, 14)
 
                 # Title row
                 t_row = QHBoxLayout()
                 vicon = VICONS.get(rule.vehicle_type, "🚗")
-                name_lbl = label(f"{vicon}  {rule.name}", bold=True)
-                name_lbl.setStyleSheet("font-size:15px; color:#1e293b;")
+                name_lbl = label(f"{vicon} {rule.name}", bold=True)
+                name_lbl.setStyleSheet("font-size:14px; color:#1e293b;")
                 t_row.addWidget(name_lbl); t_row.addStretch()
 
                 if is_active:
-                    badge = label("✔ Dang ap dung")
+                    badge = label("Đang áp dụng")
                     badge.setStyleSheet(
-                        "background:#dcfce7; color:#166534; border-radius:10px;"
-                        " padding:3px 10px; font-size:11px; font-weight:bold;"
+                        "background:#fef08a; color:#854d0e; border-radius:4px;"
+                        " padding:2px 8px; font-size:11px; font-weight:bold;"
                     )
-                else:
-                    badge = label("− Da tat")
-                    badge.setStyleSheet(
-                        "background:#f1f5f9; color:#64748b; border-radius:10px;"
-                        " padding:3px 10px; font-size:11px; font-weight:bold;"
-                    )
-                t_row.addWidget(badge); c.addLayout(t_row)
-
-                vname_lbl = label(vehicle_names.get(rule.vehicle_type, rule.vehicle_type), "muted")
-                vname_lbl.setStyleSheet("color:#64748b; font-size:12px;")
-                c.addWidget(vname_lbl)
-
+                    t_row.addWidget(badge)
+                c.addLayout(t_row)
+                
                 sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
                 sep.setStyleSheet("color: #e2e8f0;"); c.addWidget(sep)
 
-                # Stats grid
-                sg = QGridLayout(); sg.setHorizontalSpacing(20); sg.setVerticalSpacing(4)
+                # Stats grid (2 columns)
+                sg = QGridLayout(); sg.setHorizontalSpacing(30); sg.setVerticalSpacing(10)
 
-                def _add_stat(title_s, val_s, col_n, color="#1e293b"):
-                    t_l = label(title_s)
-                    t_l.setStyleSheet("color:#94a3b8; font-size:10px; font-weight:bold;")
-                    v_l = label(val_s, bold=True)
-                    v_l.setStyleSheet(f"font-size:14px; color:{color};")
-                    sg.addWidget(t_l, 0, col_n); sg.addWidget(v_l, 1, col_n)
+                def _stat_row(r_idx, col_idx, lbl_text, val_text, val_color="#1e293b"):
+                    lbl = label(lbl_text, "muted"); lbl.setStyleSheet("color:#64748b; font-size:12px; font-weight:bold;")
+                    val = label(val_text, bold=True); val.setStyleSheet(f"font-size:13px; color:{val_color};")
+                    sg.addWidget(lbl, r_idx, col_idx * 2)
+                    sg.addWidget(val, r_idx, col_idx * 2 + 1)
+                    sg.setAlignment(val, Qt.AlignmentFlag.AlignRight)
 
-                _add_stat("GIA/BLOCK", f"{rule.price_per_block:,} d", 0, "#2563eb")
-                _add_stat("BLOCK", f"{rule.block_minutes} phut", 1)
-                _add_stat("MIEN PHI", f"{rule.free_minutes} phut", 2)
-                if rule.day_max:
-                    _add_stat("TRAN/NGAY", f"{rule.day_max:,} d", 3, "#16a34a")
+                _stat_row(0, 0, "Giá/block", f"{rule.price_per_block:,} đ", "#16a34a")
+                _stat_row(0, 1, "Block", f"{rule.block_minutes} phút")
+                
+                day_max_txt = f"{rule.day_max:,} đ" if rule.day_max else "Không giới hạn"
+                _stat_row(1, 0, "Trần/ngày", day_max_txt)
+                _stat_row(1, 1, "Miễn phí", f"{rule.free_minutes} phút")
+                
                 if rule.night_surcharge:
-                    _add_stat("PHU DEM", f"{rule.night_surcharge:,} d", 4, "#d97706")
+                    _stat_row(2, 1, "Phụ thu đêm", f"{rule.night_surcharge:,} đ")
+                    
                 c.addLayout(sg)
+                
+                c.addWidget(QFrame(frameShape=QFrame.Shape.HLine).setStyleSheet("color: #e2e8f0;"))
 
-                # Actions
-                a_row = QHBoxLayout(); a_row.setContentsMargins(0, 6, 0, 0)
-                edit_btn = icon_btn("fa5s.edit", "Sua", _BTN_EDIT_STYLE)
-                if is_active:
-                    tog_style = _BTN_DEL_STYLE
-                    tog_text = "Tat"
-                    tog_icon = "fa5s.toggle-off"
-                else:
-                    tog_style = (
-                        "QPushButton { background: #16a34a; color: white; border: none;"
-                        " border-radius: 6px; padding: 5px 10px; font-size: 12px;"
-                        " font-weight: 600; } QPushButton:hover { background: #15803d; }"
-                    )
-                    tog_text = "Bat"
-                    tog_icon = "fa5s.toggle-on"
-                toggle_btn = icon_btn(tog_icon, tog_text, tog_style)
-                del_btn = icon_btn("fa5s.trash-alt", "Xoa", _BTN_DEL_STYLE)
-
+                # Actions row (Edit and Delete)
+                a_row = QHBoxLayout(); a_row.setContentsMargins(0, 0, 0, 0)
+                edit_btn = icon_btn("fa5s.edit", "Sửa", "QPushButton { color: #3b82f6; background: transparent; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 12px; font-weight: bold; } QPushButton:hover { background: #eff6ff; }")
+                del_btn = icon_btn("fa5s.trash-alt", "", "QPushButton { color: #ef4444; background: transparent; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-weight: bold; } QPushButton:hover { background: #fef2f2; }")
+                
                 edit_btn.clicked.connect(lambda _=False, item=rule: self.edit_fee_rule(item))
-                toggle_btn.clicked.connect(lambda _=False, item=rule: self.toggle_fee_rule(item))
                 del_btn.clicked.connect(lambda _=False, item=rule: self.delete_fee_rule(item))
 
-                a_row.addWidget(edit_btn); a_row.addWidget(toggle_btn)
-                a_row.addStretch(); a_row.addWidget(del_btn)
+                a_row.addWidget(edit_btn, 1) # Edit button expands
+                a_row.addWidget(del_btn)
                 c.addLayout(a_row)
 
                 grid.addWidget(f, index // 3, index % 3)
 
-            if not rules:
-                empty_lbl = label("Chua co bieu phi nao. Nhan '+ Them quy tac' de bat dau.", "muted")
-                empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                rules_layout.addWidget(empty_lbl)
+            scroll.setWidget(grid_w); box.addWidget(scroll, 1)
 
-            scroll.setWidget(grid_w); rules_layout.addWidget(scroll, 1)
-            tabs.addTab(rules_tab, "💰  Quy tac phi")
-
-            # Tab 2: Fee Calculator
-            from PySide6.QtWidgets import QDateTimeEdit as _DTE
-            from PySide6.QtCore import QDateTime as _QDT
-            calc_tab = QWidget(); calc_layout = QVBoxLayout(calc_tab)
-            calc_layout.setContentsMargins(20, 20, 20, 20); calc_layout.setSpacing(14)
-            calc_layout.addWidget(label("Tinh phi thu", bold=True, style="font-size:18px;"))
-            calc_layout.addWidget(label("Kiem tra so tien phai tra theo cau hinh bieu phi.", "muted"))
-
+            # Fee Calculator
+            calc_frame = QFrame()
+            calc_frame.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+            calc_layout = QVBoxLayout(calc_frame)
+            calc_layout.setContentsMargins(20, 16, 20, 16)
+            
+            calc_title = label("🧮 Tính phí thử", bold=True)
+            calc_title.setStyleSheet("color: #d97706; font-size: 14px;")
+            calc_layout.addWidget(calc_title)
+            
             sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
             sep2.setStyleSheet("color: #e2e8f0;"); calc_layout.addWidget(sep2)
 
-            cg = QGridLayout(); cg.setSpacing(12)
-            cg.addWidget(label("Loai xe", "muted"), 0, 0)
+            cg = QGridLayout(); cg.setSpacing(16)
+            cg.addWidget(label("Loại xe", "muted"), 0, 0)
             calc_vehicle = QComboBox(); self.fill_vehicle_combo(calc_vehicle)
             cg.addWidget(calc_vehicle, 1, 0)
 
-            cg.addWidget(label("Gio vao", "muted"), 0, 1)
+            from PySide6.QtWidgets import QDateTimeEdit as _DTE
+            from PySide6.QtCore import QDateTime as _QDT
+
+            cg.addWidget(label("Giờ vào", "muted"), 0, 1)
             dt_in = _DTE(_QDT.currentDateTime().addSecs(-3600))
             dt_in.setDisplayFormat("dd/MM/yyyy HH:mm"); dt_in.setCalendarPopup(True)
             cg.addWidget(dt_in, 1, 1)
 
-            cg.addWidget(label("Gio ra", "muted"), 0, 2)
+            cg.addWidget(label("Giờ ra", "muted"), 0, 2)
             dt_out = _DTE(_QDT.currentDateTime())
             dt_out.setDisplayFormat("dd/MM/yyyy HH:mm"); dt_out.setCalendarPopup(True)
             cg.addWidget(dt_out, 1, 2)
 
-            calc_btn2 = icon_btn("fa5s.calculator", "Tinh phi", _BTN_EDIT_STYLE)
+            calc_btn2 = QPushButton("Tính phí")
+            calc_btn2.setStyleSheet("QPushButton { color: #f97316; background: transparent; border: 1px solid #fdba74; border-radius: 6px; padding: 8px 24px; font-weight: bold; } QPushButton:hover { background: #fff7ed; }")
             cg.addWidget(calc_btn2, 1, 3)
             calc_layout.addLayout(cg)
-
-            result_frame = QFrame()
-            result_frame.setStyleSheet(
-                "background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;"
-            )
-            result_vbox = QVBoxLayout(result_frame)
-            result_detail = QLabel("")
-            result_detail.setWordWrap(True)
-            result_detail.setStyleSheet("color:#1e293b; font-size:13px; padding:8px;")
-            result_vbox.addWidget(result_detail)
-            calc_layout.addWidget(result_frame)
-            result_frame.setVisible(False)
+            
+            # Result Label
+            result_lbl = label("")
+            result_lbl.setStyleSheet("color: #1e293b; font-size: 13px;")
+            result_lbl.setVisible(False)
+            calc_layout.addWidget(result_lbl)
 
             def do_calc():
                 try:
@@ -1059,12 +1064,8 @@ def launch(settings: Settings) -> int:
                     all_rules = asyncio.run(_fee_rules(settings))
                     active_rules = [r for r in all_rules if r.is_active and r.vehicle_type == v_code]
                     if not active_rules:
-                        result_frame.setStyleSheet(
-                            "background:#fef2f2; border:1px solid #fecaca; border-radius:8px;"
-                        )
-                        result_detail.setText(
-                            "Khong tim thay quy tac phi nao dang ap dung cho loai xe nay."
-                        )
+                        result_lbl.setStyleSheet("color: #ef4444; font-size: 13px;")
+                        result_lbl.setText("Không tìm thấy quy tắc phí nào đang áp dụng cho loại xe này.")
                     else:
                         rule_c = active_rules[0]
                         entry = dt_in.dateTime().toPython()
@@ -1073,89 +1074,47 @@ def launch(settings: Settings) -> int:
                         calc_obj = _FC(rule_c)
                         fee = calc_obj.calculate(entry, exit_)
                         hours, mins = divmod(minutes, 60)
-                        result_frame.setStyleSheet(
-                            "background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;"
-                        )
-                        result_detail.setText(
-                            f"<b>Thoi gian gui:</b> {hours} gio {mins} phut<br>"
-                            f"<b>Quy tac ap dung:</b> {rule_c.name} "
-                            f"({vehicle_names.get(rule_c.vehicle_type, rule_c.vehicle_type)})<br>"
-                            f"<b>Gia/block:</b> {rule_c.price_per_block:,} d  |  "
-                            f"<b>Block:</b> {rule_c.block_minutes} phut  |  "
-                            f"<b>Mien phi:</b> {rule_c.free_minutes} phut<br>"
-                            f"<span style='font-size:18px; color:#16a34a;'>"
-                            f"<b>Tong phi: {fee:,} d</b></span>"
-                        )
-                    result_frame.setVisible(True)
+                        
+                        result_lbl.setStyleSheet("color: #16a34a; font-size: 14px; font-weight: bold;")
+                        result_lbl.setText(f"Tổng phí: {fee:,} đ (Áp dụng: {rule_c.name} - Thời gian gửi: {hours} giờ {mins} phút)")
+                    result_lbl.setVisible(True)
                 except Exception as exc:
-                    result_detail.setText(f"Loi: {exc}")
-                    result_frame.setVisible(True)
+                    result_lbl.setStyleSheet("color: #ef4444; font-size: 13px;")
+                    result_lbl.setText(f"Lỗi: {exc}")
+                    result_lbl.setVisible(True)
 
             calc_btn2.clicked.connect(do_calc)
-            calc_layout.addStretch()
-            tabs.addTab(calc_tab, "🧮  Tinh phi thu")
 
-            # Tab 3: History
-            from PySide6.QtGui import QColor as _QColor
-            hist_tab = QWidget(); hist_layout = QVBoxLayout(hist_tab)
-            hist_layout.setContentsMargins(12, 12, 12, 12)
-            hist_layout.addWidget(label("Lich su cac quy tac phi", bold=True, style="font-size:16px;"))
-            hist_layout.addWidget(label("Danh sach toan bo quy tac (dang ap dung va da tat).", "muted"))
-            hist_tbl = self.make_table(
-                ["Quy tac", "Loai xe", "Gia/block", "Block", "Mien phi", "Tran/ngay", "Trang thai"],
-                action_col_width=130
-            )
-            try:
-                snap_rules = asyncio.run(_fee_rules(settings))
-                snap_names = asyncio.run(_vehicle_name_map(settings))
-                hist_tbl.setRowCount(len(snap_rules))
-                for ri, sr in enumerate(snap_rules):
-                    vals = (
-                        sr.name,
-                        snap_names.get(sr.vehicle_type, sr.vehicle_type),
-                        f"{sr.price_per_block:,} d",
-                        f"{sr.block_minutes} phut",
-                        f"{sr.free_minutes} phut",
-                        f"{sr.day_max:,} d" if sr.day_max else "--",
-                    )
-                    for ci, val in enumerate(vals):
-                        itm = QTableWidgetItem(val)
-                        itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        hist_tbl.setItem(ri, ci, itm)
-                    status_itm = QTableWidgetItem(
-                        "Dang ap dung" if sr.is_active else "Da tat"
-                    )
-                    status_itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                    status_itm.setForeground(
-                        _QColor("#166534" if sr.is_active else "#94a3b8")
-                    )
-                    hist_tbl.setItem(ri, 6, status_itm)
-            except Exception:
-                pass
-            hist_layout.addWidget(hist_tbl, 1)
-            tabs.addTab(hist_tab, "🗓  Lich su")
-
-            box.addWidget(tabs, 1)
+            box.addWidget(calc_frame)
             return page
 
-        def toggle_fee_rule(self, rule) -> None:
-            try:
-                from pmql.infrastructure.persistence.sqlite.database import Database as _DB2
-                from pmql.infrastructure.persistence.sqlite.repositories import SQLiteFeeRuleRepository as _FR2
-                async def _do_toggle():
-                    db = _DB2(settings.local_database_url)
-                    async with db.session() as session:
-                        repo = _FR2(session)
-                        r = await repo.get_by_id(rule.id)
-                        if r:
-                            r.is_active = not r.is_active
-                            await repo.update(r)
-                    await db.dispose()
-                asyncio.run(_do_toggle())
-                self.reload_page("fees")
-            except Exception as exc:
-                QMessageBox.warning(self, "Loi", str(exc))
+        def add_fee_rule(self) -> None:
+            dialog, content, footer = modal_shell(self, "Thêm quy tắc phí", 620); form = QFormLayout(); content.addLayout(form)
+            name, vehicle, block, price, free, surcharge, maximum = QLineEdit(), QComboBox(), QLineEdit("60"), QLineEdit("5000"), QLineEdit("0"), QLineEdit("0"), QLineEdit(); self.fill_vehicle_combo(vehicle)
+            is_active_cb = QCheckBox("Đang áp dụng"); is_active_cb.setChecked(True)
+            form.addRow("Tên quy tắc *", name); form.addRow("Loại xe", vehicle); form.addRow("Block tính (phút)", block); form.addRow("Giá mỗi block (VND)", price); form.addRow("Trần/ngày (VND)", maximum); form.addRow("Phụ thu đêm (VND)", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("", is_active_cb)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_rule() -> None:
+                try:
+                    asyncio.run(_create_fee_rule(settings, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_cb.isChecked())); dialog.accept(); self.reload_page("fees")
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_rule); dialog.exec()
 
+        def edit_fee_rule(self, rule) -> None:
+            dialog, content, footer = modal_shell(self, "Sửa quy tắc phí", 560); form = QFormLayout(); content.addLayout(form)
+            name, vehicle, price, block, free, surcharge, maximum = QLineEdit(rule.name), QComboBox(), QLineEdit(str(rule.price_per_block)), QLineEdit(str(rule.block_minutes)), QLineEdit(str(rule.free_minutes)), QLineEdit(str(rule.night_surcharge or 0)), QLineEdit(str(rule.day_max or "")); self.fill_vehicle_combo(vehicle); vehicle.setCurrentIndex(max(0, vehicle.findData(rule.vehicle_type)))
+            is_active_cb = QCheckBox("Đang áp dụng"); is_active_cb.setChecked(rule.is_active)
+            form.addRow("Tên quy tắc", name); form.addRow("Loại xe", vehicle); form.addRow("Giá/block", price); form.addRow("Block (phút)", block); form.addRow("Trần/ngày", maximum); form.addRow("Phụ thu đêm", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("", is_active_cb)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
+            def save_rule() -> None:
+                try: asyncio.run(_update_fee_rule(settings, rule.id, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_cb.isChecked())); dialog.accept(); self.reload_page("fees")
+                except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
+            save.clicked.connect(save_rule); dialog.exec()
+
+        def delete_fee_rule(self, rule) -> None:
+            if QMessageBox.question(self, "Xóa biểu phí", f"Xóa mềm quy tắc '{rule.name}'?") != QMessageBox.StandardButton.Yes: return
+            try: asyncio.run(_delete_fee_rule(settings, rule.id)); self.reload_page("fees")
+            except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
         def subscriber_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thuê bao", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thuê bao"); add.setObjectName("primary"); add.clicked.connect(self.add_subscriber); row.addWidget(add); box.addLayout(row)
             self.subscriber_table = self.make_table(["Họ tên", "Số điện thoại", "CMND/CCCD", "Phương tiện đăng ký", "Hiệu lực đến", "Trạng thái", "Thao tác"], action_col_width=210); box.addWidget(self.subscriber_table, 1); self.load_subscribers(); return page
@@ -1909,7 +1868,7 @@ async def _create_subscriber(settings: Settings, full_name: str, phone: str, ema
             await RegisterSubscriberUseCase(SQLiteSubscriberRepository(session), SQLiteCardRepository(session), SQLiteVehicleRepository(session)).execute(RegisterSubscriberInput(settings.branch_id, full_name.strip(), phone.strip(), identity_card.strip(), vehicles, date.fromisoformat(valid_from), date.fromisoformat(valid_until), email, rfid_code))
     finally: await db.dispose()
 
-async def _create_fee_rule(settings: Settings, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None) -> None:
+async def _create_fee_rule(settings: Settings, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None, is_active: bool = True) -> None:
     if not name.strip(): raise ValueError("Tên quy tắc là bắt buộc")
     db = Database(settings.local_database_url)
     try:
@@ -1923,12 +1882,12 @@ async def _create_fee_rule(settings: Settings, name: str, vehicle_type: str, blo
                 await repo.update(created)
     finally: await db.dispose()
 
-async def _update_fee_rule(settings: Settings, rule_id: str, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None) -> None:
+async def _update_fee_rule(settings: Settings, rule_id: str, name: str, vehicle_type: str, block_minutes: int, price_per_block: int, free_minutes: int, night_surcharge: int, day_max: int | None, is_active: bool = True) -> None:
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
             repo = SQLiteFeeRuleRepository(session)
-            await FeeRuleManagementUseCase(repo).update(rule_id, FeeRuleInput(settings.branch_id, name, vehicle_type, free_minutes, block_minutes, price_per_block, day_max))
+            await FeeRuleManagementUseCase(repo).update(rule_id, FeeRuleInput(settings.branch_id, name, vehicle_type, free_minutes, block_minutes, price_per_block, day_max, is_active))
             rule = await repo.get_by_id(rule_id)
             if rule is not None:
                 rule.night_surcharge = night_surcharge or None
