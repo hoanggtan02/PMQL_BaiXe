@@ -91,13 +91,12 @@ def launch(settings: Settings) -> int:
     _BTN_DEL_STYLE  = "QPushButton { background: #ef4444; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #dc2626; }"
     _BTN_PLAIN_STYLE = "QPushButton { background: #64748b; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #475569; }"
 
-    def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int = 16) -> QPushButton:
+    def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int = 16, icon_color: str = "white") -> QPushButton:
         """Create a styled icon button using qtawesome icons."""
         btn = QPushButton()
         if _HAS_QTA:
             try:
-                color = "white"
-                ico = qta.icon(icon_name, color=color)
+                ico = qta.icon(icon_name, color=icon_color)
                 btn.setIcon(ico)
                 btn.setIconSize(QSize(size, size))
                 btn.setText(f" {text}")
@@ -918,16 +917,55 @@ def launch(settings: Settings) -> int:
             footer.addStretch(); footer.addWidget(close)
             dialog.exec()
 
+        def show_fee_history(self):
+            dialog, content, footer = modal_shell(self, "Lịch sử các quy tắc phí", 800)
+            from PySide6.QtGui import QColor as _QColor
+            hist_tbl = self.make_table(
+                ["Quy tắc", "Loại xe", "Giá/block", "Block", "Miễn phí", "Trần/ngày", "Trạng thái"],
+                action_col_width=130
+            )
+            try:
+                snap_rules = asyncio.run(_fee_rules(settings))
+                snap_names = asyncio.run(_vehicle_name_map(settings))
+                hist_tbl.setRowCount(len(snap_rules))
+                for ri, sr in enumerate(snap_rules):
+                    vals = (
+                        sr.name,
+                        snap_names.get(sr.vehicle_type, sr.vehicle_type),
+                        f"{sr.price_per_block:,} đ",
+                        f"{sr.block_minutes} phút",
+                        f"{sr.free_minutes} phút",
+                        f"{sr.day_max:,} đ" if sr.day_max else "--",
+                    )
+                    for ci, val in enumerate(vals):
+                        itm = QTableWidgetItem(val)
+                        itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        hist_tbl.setItem(ri, ci, itm)
+                    status_itm = QTableWidgetItem(
+                        "Đang áp dụng" if sr.is_active else "Đã tắt"
+                    )
+                    status_itm.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    status_itm.setForeground(
+                        _QColor("#166534" if sr.is_active else "#94a3b8")
+                    )
+                    hist_tbl.setItem(ri, 6, status_itm)
+            except Exception:
+                pass
+            content.addWidget(hist_tbl)
+            close = QPushButton("Đóng"); close.clicked.connect(dialog.reject)
+            footer.addStretch(); footer.addWidget(close)
+            dialog.exec()
+
         def fee_page(self) -> QWidget:
             page, box = self.page()
             
             # Header
             hrow = QHBoxLayout()
-            hist_btn = icon_btn("fa5s.history", "Lịch sử thay đổi", "QPushButton { background: white; color: #64748b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; } QPushButton:hover { background: #f1f5f9; }")
+            hist_btn = icon_btn("fa5s.history", "Lịch sử thay đổi", "QPushButton { background: white; color: #64748b; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; } QPushButton:hover { background: #f1f5f9; }", icon_color="#64748b")
             hist_btn.clicked.connect(self.show_fee_history)
             hrow.addWidget(hist_btn); hrow.addStretch()
             
-            add_btn = icon_btn("fa5s.plus", "Thêm quy tắc phí", _BTN_EDIT_STYLE.replace("#3b82f6", "#f97316")) # Orange
+            add_btn = icon_btn("fa5s.plus", "Thêm quy tắc phí", _BTN_EDIT_STYLE.replace("#3b82f6", "#f97316"))
             add_btn.clicked.connect(self.add_fee_rule)
             hrow.addWidget(add_btn)
             box.addLayout(hrow)
@@ -997,12 +1035,12 @@ def launch(settings: Settings) -> int:
                     
                 c.addLayout(sg)
                 
-                c.addWidget(QFrame(frameShape=QFrame.Shape.HLine).setStyleSheet("color: #e2e8f0;"))
+                sep2_f = QFrame(); sep2_f.setFrameShape(QFrame.Shape.HLine); sep2_f.setStyleSheet("color: #e2e8f0;"); c.addWidget(sep2_f)
 
                 # Actions row (Edit and Delete)
                 a_row = QHBoxLayout(); a_row.setContentsMargins(0, 0, 0, 0)
-                edit_btn = icon_btn("fa5s.edit", "Sửa", "QPushButton { color: #3b82f6; background: transparent; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 12px; font-weight: bold; } QPushButton:hover { background: #eff6ff; }")
-                del_btn = icon_btn("fa5s.trash-alt", "", "QPushButton { color: #ef4444; background: transparent; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-weight: bold; } QPushButton:hover { background: #fef2f2; }")
+                edit_btn = icon_btn("fa5s.edit", "Sửa", "QPushButton { color: #3b82f6; background: transparent; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 12px; font-weight: bold; } QPushButton:hover { background: #eff6ff; }", icon_color="#3b82f6")
+                del_btn = icon_btn("fa5s.trash-alt", "", "QPushButton { color: #ef4444; background: transparent; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-weight: bold; } QPushButton:hover { background: #fef2f2; }", icon_color="#ef4444")
                 
                 edit_btn.clicked.connect(lambda _=False, item=rule: self.edit_fee_rule(item))
                 del_btn.clicked.connect(lambda _=False, item=rule: self.delete_fee_rule(item))
@@ -1017,7 +1055,8 @@ def launch(settings: Settings) -> int:
 
             # Fee Calculator
             calc_frame = QFrame()
-            calc_frame.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+            calc_frame.setObjectName("calc_frame")
+            calc_frame.setStyleSheet("QFrame#calc_frame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
             calc_layout = QVBoxLayout(calc_frame)
             calc_layout.setContentsMargins(20, 16, 20, 16)
             
@@ -1025,8 +1064,8 @@ def launch(settings: Settings) -> int:
             calc_title.setStyleSheet("color: #d97706; font-size: 14px;")
             calc_layout.addWidget(calc_title)
             
-            sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-            sep2.setStyleSheet("color: #e2e8f0;"); calc_layout.addWidget(sep2)
+            sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.HLine)
+            sep3.setStyleSheet("color: #e2e8f0;"); calc_layout.addWidget(sep3)
 
             cg = QGridLayout(); cg.setSpacing(16)
             cg.addWidget(label("Loại xe", "muted"), 0, 0)
@@ -1091,23 +1130,33 @@ def launch(settings: Settings) -> int:
         def add_fee_rule(self) -> None:
             dialog, content, footer = modal_shell(self, "Thêm quy tắc phí", 620); form = QFormLayout(); content.addLayout(form)
             name, vehicle, block, price, free, surcharge, maximum = QLineEdit(), QComboBox(), QLineEdit("60"), QLineEdit("5000"), QLineEdit("0"), QLineEdit("0"), QLineEdit(); self.fill_vehicle_combo(vehicle)
-            is_active_cb = QCheckBox("Đang áp dụng"); is_active_cb.setChecked(True)
-            form.addRow("Tên quy tắc *", name); form.addRow("Loại xe", vehicle); form.addRow("Block tính (phút)", block); form.addRow("Giá mỗi block (VND)", price); form.addRow("Trần/ngày (VND)", maximum); form.addRow("Phụ thu đêm (VND)", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("", is_active_cb)
+            
+            status_cb = QComboBox()
+            status_cb.addItems(["Đang áp dụng", "Đã tắt"])
+            
+            form.addRow("Tên quy tắc *", name); form.addRow("Loại xe", vehicle); form.addRow("Block tính (phút)", block); form.addRow("Giá mỗi block (VND)", price); form.addRow("Trần/ngày (VND)", maximum); form.addRow("Phụ thu đêm (VND)", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("Trạng thái", status_cb)
             cancel, save = QPushButton("Hủy"), QPushButton("Lưu"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
             def save_rule() -> None:
                 try:
-                    asyncio.run(_create_fee_rule(settings, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_cb.isChecked())); dialog.accept(); self.reload_page("fees")
+                    is_active_val = (status_cb.currentText() == "Đang áp dụng")
+                    asyncio.run(_create_fee_rule(settings, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_val)); dialog.accept(); self.reload_page("fees")
                 except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
             save.clicked.connect(save_rule); dialog.exec()
 
         def edit_fee_rule(self, rule) -> None:
             dialog, content, footer = modal_shell(self, "Sửa quy tắc phí", 560); form = QFormLayout(); content.addLayout(form)
             name, vehicle, price, block, free, surcharge, maximum = QLineEdit(rule.name), QComboBox(), QLineEdit(str(rule.price_per_block)), QLineEdit(str(rule.block_minutes)), QLineEdit(str(rule.free_minutes)), QLineEdit(str(rule.night_surcharge or 0)), QLineEdit(str(rule.day_max or "")); self.fill_vehicle_combo(vehicle); vehicle.setCurrentIndex(max(0, vehicle.findData(rule.vehicle_type)))
-            is_active_cb = QCheckBox("Đang áp dụng"); is_active_cb.setChecked(rule.is_active)
-            form.addRow("Tên quy tắc", name); form.addRow("Loại xe", vehicle); form.addRow("Giá/block", price); form.addRow("Block (phút)", block); form.addRow("Trần/ngày", maximum); form.addRow("Phụ thu đêm", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("", is_active_cb)
+            
+            status_cb = QComboBox()
+            status_cb.addItems(["Đang áp dụng", "Đã tắt"])
+            status_cb.setCurrentText("Đang áp dụng" if rule.is_active else "Đã tắt")
+            
+            form.addRow("Tên quy tắc", name); form.addRow("Loại xe", vehicle); form.addRow("Giá/block", price); form.addRow("Block (phút)", block); form.addRow("Trần/ngày", maximum); form.addRow("Phụ thu đêm", surcharge); form.addRow("Miễn phí (phút đầu)", free); form.addRow("Trạng thái", status_cb)
             cancel, save = QPushButton("Hủy"), QPushButton("Lưu thay đổi"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
             def save_rule() -> None:
-                try: asyncio.run(_update_fee_rule(settings, rule.id, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_cb.isChecked())); dialog.accept(); self.reload_page("fees")
+                try: 
+                    is_active_val = (status_cb.currentText() == "Đang áp dụng")
+                    asyncio.run(_update_fee_rule(settings, rule.id, name.text(), vehicle.currentData(), int(block.text()), int(price.text()), int(free.text()), int(surcharge.text()), int(maximum.text()) if maximum.text() else None, is_active_val)); dialog.accept(); self.reload_page("fees")
                 except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
             save.clicked.connect(save_rule); dialog.exec()
 
