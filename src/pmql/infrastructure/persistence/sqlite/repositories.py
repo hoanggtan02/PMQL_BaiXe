@@ -813,3 +813,26 @@ class SQLiteDeviceRepository:
     async def list_all(self) -> list[Device]:
         result = await self._session.execute(select(DeviceModel))
         return [_device_to_entity(r) for r in result.scalars().all()]
+
+
+class SQLiteSettingsRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_settings(self):
+        from pmql.infrastructure.persistence.sqlite.models import SystemSettingsModel
+        from sqlalchemy import select
+        result = await self._session.execute(select(SystemSettingsModel).where(SystemSettingsModel.id == "default"))
+        row = result.scalars().first()
+        if not row:
+            row = SystemSettingsModel(id="default")
+            self._session.add(row)
+            await self._session.flush()
+        return row
+
+    async def save_settings(self, data: dict) -> None:
+        row = await self.get_settings()
+        for k, v in data.items():
+            if hasattr(row, k):
+                setattr(row, k, v)
+        await self._session.flush()

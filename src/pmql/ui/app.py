@@ -151,15 +151,15 @@ def launch(settings: Settings) -> int:
             root = QWidget(); root.setObjectName("root"); layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
             layout.addWidget(self.build_sidebar()); right = QWidget(); right_layout = QVBoxLayout(right); right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(0)
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
-            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": lambda: self.table_page("Phiên gửi xe", ["Biển số", "Trạng thái", "Vào lúc", "Ra lúc", "Phí"], _session_rows), "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page}
+            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "settings": self.settings_page}
             self.pages = {key: factory() for key, factory in self.page_factories.items()}
             for page in self.pages.values(): self.stack.addWidget(page)
             self.go("overview")
 
         def build_sidebar(self) -> QWidget:
-            side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(250); box = QVBoxLayout(side); box.setContentsMargins(12, 20, 12, 16)
+            side = QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(220); box = QVBoxLayout(side); box.setContentsMargins(12, 20, 12, 16)
             box.addWidget(label("P  PMQL BÃI XE", bold=True)); box.addWidget(label("Hệ thống quản lý bãi xe", "muted")); box.addSpacing(18)
-            groups = [("", [("overview", "▦  Tổng quan"), ("operations", "⚑  Vận hành làn"), ("sessions", "◌  Phiên gửi xe"), ("alerts", "▲  Cảnh báo"), ("shifts", "◴  Ca làm việc")]), ("QUẢN LÝ", [("subscribers", "▣  Thuê bao"), ("cards", "▤  Thẻ xe"), ("fees", "◆  Biểu phí"), ("lanes", "⚙  Cấu hình làn"), ("vehicle_types", "▧  Loại xe")]), ("HỆ THỐNG", [("accounts", "♙  Tài khoản & phân quyền")])]
+            groups = [("", [("overview", "▦  Tổng quan"), ("operations", "⚑  Vận hành làn"), ("sessions", "◌  Phiên gửi xe"), ("alerts", "▲  Cảnh báo"), ("shifts", "◴  Ca làm việc")]), ("QUẢN LÝ", [("subscribers", "▣  Thuê bao"), ("cards", "▤  Thẻ xe"), ("fees", "◆  Biểu phí"), ("lanes", "⚙  Cấu hình làn"), ("vehicle_types", "▧  Loại xe")]), ("HỆ THỐNG", [("accounts", "♙  Tài khoản & phân quyền"), ("settings", "⚙  Cài đặt")])]
             for group, links in groups:
                 if group: box.addWidget(label(group, "section"))
                 required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.manage", "shifts": "shift.manage", "subscribers": "subscriber.manage", "cards": "card.manage", "fees": "fee.manage", "lanes": "lane.view", "vehicle_types": "fee.manage", "accounts": "user.manage"}
@@ -174,7 +174,7 @@ def launch(settings: Settings) -> int:
             search = QLineEdit(); search.setPlaceholderText("⌕  Tìm kiếm…"); search.setMaximumWidth(285); row.addWidget(search); row.addSpacing(14); row.addWidget(label("● Kết nối", "badge", True)); row.addSpacing(12); row.addWidget(label(f"◉  {getattr(self.user, 'username')}", bold=True)); return bar
 
         def go(self, key: str) -> None:
-            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền"}[key])
+            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "settings":"Cài đặt hệ thống"}[key])
             for item_key, button in self.nav.items(): button.setProperty("active", item_key == key); button.style().unpolish(button); button.style().polish(button)
             if key in {"overview", "operations"}: self.refresh_live()
 
@@ -453,6 +453,219 @@ def launch(settings: Settings) -> int:
             def filter_rows(query: str) -> None:
                 for r in range(table.rowCount()): table.setRowHidden(r, bool(query) and query.lower() not in " ".join(table.item(r,c).text().lower() for c in range(table.columnCount()) if table.item(r,c)))
             refresh.clicked.connect(load); search.textChanged.connect(filter_rows); load(); return page
+
+        def session_page(self) -> QWidget:
+            page, box = self.page()
+            
+            # Header
+            h = label("Phiên gửi xe", bold=True); h.setStyleSheet("font-size:24px;")
+            box.addWidget(h)
+            
+            # Stats Card
+            stat_frame = QFrame()
+            stat_frame.setObjectName("stat_frame")
+            stat_frame.setStyleSheet("QFrame#stat_frame { background: white; border: 1px solid #22c55e; border-radius: 8px; }")
+            stat_frame.setFixedSize(160, 80)
+            stat_layout = QVBoxLayout(stat_frame)
+            stat_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            val_lbl = label("0", bold=True)
+            val_lbl.setStyleSheet("color: #22c55e; font-size: 28px;")
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            desc_lbl = label("Đang gửi")
+            desc_lbl.setStyleSheet("color: #64748b; font-size: 14px;")
+            desc_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            stat_layout.addWidget(val_lbl)
+            stat_layout.addWidget(desc_lbl)
+            box.addWidget(stat_frame)
+            
+            # Tabs
+            tabs = QTabWidget()
+            tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 4px; background: white; } QTabBar::tab { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 16px; margin-right: 2px; border-top-left-radius: 4px; border-top-right-radius: 4px; color: #64748b; font-weight: bold; } QTabBar::tab:selected { background: white; border-bottom-color: white; color: #0f172a; }")
+            
+            tab_active = QWidget(); tab_active_ly = QVBoxLayout(tab_active)
+            tab_history = QWidget(); tab_history_ly = QVBoxLayout(tab_history)
+            
+            tabs.addTab(tab_active, "Đang trong bãi")
+            tabs.addTab(tab_history, "Lịch sử")
+            box.addWidget(tabs, 1)
+            
+            # --- Tab 1: Active ---
+            tbl_active = self.make_table(["Thẻ", "Biển số", "Loại xe", "Loại", "Vào lúc", "Thời gian", "Làn vào", "Thao tác"], action_col_width=120)
+            tab_active_ly.addWidget(tbl_active)
+            
+            # --- Tab 2: History ---
+            hist_top = QHBoxLayout()
+            from PySide6.QtWidgets import QDateEdit, QComboBox
+            from PySide6.QtCore import QDate, QDateTime
+            
+            hist_top.addWidget(label("Từ ngày", "muted"))
+            dt_from = QDateEdit(QDate.currentDate().addDays(-7))
+            dt_from.setCalendarPopup(True)
+            hist_top.addWidget(dt_from)
+            
+            hist_top.addWidget(label("Đến ngày", "muted"))
+            dt_to = QDateEdit(QDate.currentDate())
+            dt_to.setCalendarPopup(True)
+            hist_top.addWidget(dt_to)
+            
+            hist_top.addWidget(label("Loại", "muted"))
+            cb_type = QComboBox()
+            cb_type.addItems(["Tất cả", "Vãng lai", "Thuê bao"])
+            hist_top.addWidget(cb_type)
+            
+            hist_top.addWidget(label("Biển số", "muted"))
+            search_plate = QLineEdit()
+            search_plate.setPlaceholderText("VD: 51A...")
+            hist_top.addWidget(search_plate)
+            
+            btn_search = QPushButton("Tìm")
+            btn_search.setStyleSheet("QPushButton { background: #f97316; color: white; border: none; border-radius: 4px; padding: 6px 16px; font-weight: bold; } QPushButton:hover { background: #ea580c; }")
+            hist_top.addWidget(btn_search)
+            
+            hist_top.addStretch()
+            total_lbl = label("Tổng: 0 phiên", bold=True)
+            total_lbl.setStyleSheet("color: #64748b;")
+            hist_top.addWidget(total_lbl)
+            
+            tab_history_ly.addLayout(hist_top)
+            
+            tbl_history = self.make_table(["Thẻ", "Biển số vào", "Biển số ra", "Loại", "Vào", "Ra", "Thời gian", "Phí", "Trạng thái"], action_col_width=120)
+            tab_history_ly.addWidget(tbl_history)
+            
+            def load_sessions():
+                try:
+                    db = Database(settings.local_database_url)
+                    import asyncio
+                    from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSessionRepository, SQLiteVehicleRepository, SQLiteLaneRepository
+                    
+                    async def fetch():
+                        async with db.session() as session:
+                            s_repo = SQLiteSessionRepository(session)
+                            l_repo = SQLiteLaneRepository(session)
+                            
+                            all_sessions = await s_repo.list_recent(settings.branch_id, 5000)
+                            lanes = await l_repo.list_active()
+                            l_map = {l.id: l.name for l in lanes}
+                            
+                            return all_sessions, l_map
+                    
+                    v_map = asyncio.run(_vehicle_name_map(settings))
+                    all_sessions, l_map = asyncio.run(fetch())
+                    
+                    active = [s for s in all_sessions if s.status == "ACTIVE"]
+                    val_lbl.setText(str(len(active)))
+                    
+                    # Populate Active
+                    tbl_active.setRowCount(len(active))
+                    from PySide6.QtGui import QColor as _QC
+                    for r, s in enumerate(active):
+                        card_lbl = label(s.rfid_card_id or "-", bold=True)
+                        card_lbl.setStyleSheet("color: #ef4444;")
+                        tbl_active.setCellWidget(r, 0, card_lbl)
+                        
+                        plate_lbl = label(s.plate_number or "-", bold=True)
+                        plate_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_w = QWidget(); p_ly = QHBoxLayout(plate_w); p_ly.setContentsMargins(0,0,0,0); p_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p_ly.addWidget(plate_lbl)
+                        tbl_active.setCellWidget(r, 1, plate_w)
+                        
+                        v_name = v_map.get(s.vehicle_type, "Xe máy") if hasattr(s, 'vehicle_type') else "Xe máy"
+                        v_icon = "🛵" if "máy" in v_name.lower() else "🚗"
+                        v_lbl = label(f"{v_icon} {v_name}")
+                        v_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setCellWidget(r, 2, v_lbl)
+                        
+                        type_badge = label("Thuê bao" if s.subscriber_id else "Vãng lai")
+                        type_badge.setStyleSheet("background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; color: #475569; font-size: 11px;")
+                        type_w = QWidget(); ty_ly = QHBoxLayout(type_w); ty_ly.setContentsMargins(0,0,0,0); ty_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); ty_ly.addWidget(type_badge)
+                        tbl_active.setCellWidget(r, 3, type_w)
+                        
+                        entry_str = s.entry_time.strftime("%H:%M:%S %d/%m/%Y")
+                        e_lbl = label(entry_str)
+                        e_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setCellWidget(r, 4, e_lbl)
+                        
+                        now = QDateTime.currentDateTime().toPython()
+                        mins = int((now - s.entry_time).total_seconds() / 60)
+                        hrs, mins = divmod(mins, 60)
+                        dur_lbl = label(f"{hrs}g {mins}p", bold=True)
+                        dur_lbl.setStyleSheet("background: #38bdf8; color: white; border-radius: 4px; padding: 2px 6px;")
+                        dur_w = QWidget(); d_ly = QHBoxLayout(dur_w); d_ly.setContentsMargins(0,0,0,0); d_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); d_ly.addWidget(dur_lbl)
+                        tbl_active.setCellWidget(r, 5, dur_w)
+                        
+                        l_name = l_map.get(s.lane_in_id, "Làn vào")
+                        ln_lbl = label(l_name)
+                        ln_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setCellWidget(r, 6, ln_lbl)
+                        
+                        btn_exc = QPushButton("Ngoại lệ")
+                        btn_exc.setStyleSheet("QPushButton { color: #ef4444; background: white; border: 1px solid #ef4444; border-radius: 4px; padding: 2px 8px; }")
+                        b_w = QWidget(); b_ly = QHBoxLayout(b_w); b_ly.setContentsMargins(0,0,0,0); b_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); b_ly.addWidget(btn_exc)
+                        tbl_active.setCellWidget(r, 7, b_w)
+                        
+                    # Populate History
+                    start_d = dt_from.date().toPython()
+                    end_d = dt_to.date().toPython()
+                    search_str = search_plate.text().strip().lower()
+                    
+                    history = []
+                    for s in all_sessions:
+                        if s.status == "ACTIVE": continue
+                        if s.entry_time.date() < start_d or s.entry_time.date() > end_d: continue
+                        if search_str and search_str not in (s.plate_number or "").lower(): continue
+                        history.append(s)
+                        
+                    total_lbl.setText(f"Tổng: {len(history)} phiên")
+                    tbl_history.setRowCount(len(history))
+                    for r, s in enumerate(history):
+                        card_lbl = label(s.rfid_card_id or "-", bold=True); card_lbl.setStyleSheet("color: #ef4444;")
+                        tbl_history.setCellWidget(r, 0, card_lbl)
+                        
+                        plate_lbl = label(s.plate_number or "-", bold=True); plate_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_w = QWidget(); p_ly = QHBoxLayout(plate_w); p_ly.setContentsMargins(0,0,0,0); p_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p_ly.addWidget(plate_lbl)
+                        tbl_history.setCellWidget(r, 1, plate_w)
+                        
+                        plate_out_lbl = label(s.plate_number or "-", bold=True); plate_out_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_out_w = QWidget(); p2_ly = QHBoxLayout(plate_out_w); p2_ly.setContentsMargins(0,0,0,0); p2_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p2_ly.addWidget(plate_out_lbl)
+                        tbl_history.setCellWidget(r, 2, plate_out_w)
+                        
+                        type_badge = label("Thuê bao" if s.subscriber_id else "Vãng lai")
+                        type_badge.setStyleSheet("background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; color: #475569; font-size: 11px;")
+                        type_w = QWidget(); ty_ly = QHBoxLayout(type_w); ty_ly.setContentsMargins(0,0,0,0); ty_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); ty_ly.addWidget(type_badge)
+                        tbl_history.setCellWidget(r, 3, type_w)
+                        
+                        e_lbl = label(s.entry_time.strftime("%H:%M:%S %d/%m/%Y")); e_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_history.setCellWidget(r, 4, e_lbl)
+                        
+                        ex_lbl = label(s.exit_time.strftime("%H:%M:%S %d/%m/%Y") if s.exit_time else "-"); ex_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_history.setCellWidget(r, 5, ex_lbl)
+                        
+                        dur_str = "-"
+                        if s.exit_time:
+                            mins = int((s.exit_time - s.entry_time).total_seconds() / 60)
+                            hrs, mins = divmod(mins, 60)
+                            dur_str = f"{hrs}g {mins}p"
+                        tbl_history.setItem(r, 6, QTableWidgetItem(dur_str))
+                        tbl_history.item(r, 6).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        
+                        fee_str = f"{s.fee_amount:,} đ" if s.fee_amount else "-"
+                        tbl_history.setItem(r, 7, QTableWidgetItem(fee_str))
+                        tbl_history.item(r, 7).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        
+                        status_badge = label("Đã ra")
+                        status_badge.setStyleSheet("background: #dcfce7; border: 1px solid #86efac; border-radius: 4px; padding: 2px 6px; color: #166534; font-size: 11px;")
+                        st_w = QWidget(); st_ly = QHBoxLayout(st_w); st_ly.setContentsMargins(0,0,0,0); st_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); st_ly.addWidget(status_badge)
+                        tbl_history.setCellWidget(r, 8, st_w)
+                        
+                except Exception as exc:
+                    print("Error loading sessions:", exc)
+            
+            load_sessions()
+            btn_search.clicked.connect(load_sessions)
+            
+            return page
 
         def shift_page(self) -> QWidget:
             page, box = self.page(); heading = QHBoxLayout(); title = label("Quản lý ca làm việc", bold=True); title.setStyleSheet("font-size:24px; color: #1e293b;"); heading.addWidget(title); heading.addStretch(); box.addLayout(heading)
@@ -1110,8 +1323,8 @@ def launch(settings: Settings) -> int:
                         entry = dt_in.dateTime().toPython()
                         exit_ = dt_out.dateTime().toPython()
                         minutes = max(0, int((exit_ - entry).total_seconds() / 60))
-                        calc_obj = _FC(rule_c)
-                        fee = calc_obj.calculate(entry, exit_)
+                        calc_obj = _FC()
+                        fee = calc_obj.calculate(entry, exit_, rule_c)
                         hours, mins = divmod(minutes, 60)
                         
                         result_lbl.setStyleSheet("color: #16a34a; font-size: 14px; font-weight: bold;")
@@ -1657,6 +1870,266 @@ def launch(settings: Settings) -> int:
             if QMessageBox.question(self, "Xóa loại xe", f"Xóa mềm loại xe '{item.display_name}'?") != QMessageBox.StandardButton.Yes: return
             try: asyncio.run(_delete_vehicle_type(settings, item.id)); self.reload_page("vehicle_types")
             except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
+
+        def settings_page(self) -> QWidget:
+            page, box = self.page(); h = label("Cài đặt hệ thống", bold=True); h.setStyleSheet("font-size:24px;"); box.addWidget(h)
+            
+            try:
+                import asyncio
+                sys_settings = asyncio.run(_load_sys_settings(settings))
+            except Exception as e:
+                print("Error loading sys settings:", e)
+                sys_settings = None
+                
+            main_layout = QHBoxLayout(); main_layout.setSpacing(24)
+            left_col = QVBoxLayout(); left_col.setSpacing(16)
+            right_col = QVBoxLayout(); right_col.setSpacing(16)
+            
+            # --- Cột trái ---
+            def make_group(title_text, icon_text, color):
+                g = QFrame(); g.setStyleSheet(f"QFrame {{ background: white; border: none; border-radius: 8px; }}")
+                ly = QVBoxLayout(g); ly.setSpacing(16)
+                
+                header = QHBoxLayout()
+                ico = label(icon_text, bold=True)
+                ico.setStyleSheet(f"background: {color}20; color: {color}; border-radius: 4px; padding: 4px 8px; border: none;")
+                header.addWidget(ico)
+                
+                t_ly = QVBoxLayout(); t_ly.setSpacing(2)
+                t_lbl = label(title_text, bold=True); t_lbl.setStyleSheet("border: none;")
+                t_ly.addWidget(t_lbl)
+                header.addLayout(t_ly)
+                header.addStretch()
+                ly.addLayout(header)
+                return g, ly
+                
+            # 1. Thông tin bãi xe
+            g1, l1 = make_group("Thông tin bãi xe", "🏢", "#f97316")
+            f1 = QGridLayout(); f1.setSpacing(12)
+            f1.addWidget(label("Tên bãi xe *", "muted"), 0, 0)
+            in_name = QLineEdit(sys_settings.parking_name if sys_settings else "")
+            f1.addWidget(in_name, 1, 0)
+            
+            f1.addWidget(label("Số điện thoại", "muted"), 0, 1)
+            in_phone = QLineEdit(sys_settings.phone if sys_settings else "")
+            f1.addWidget(in_phone, 1, 1)
+            
+            f1.addWidget(label("Địa chỉ", "muted"), 2, 0, 1, 2)
+            in_address = QLineEdit(sys_settings.address if sys_settings else "")
+            f1.addWidget(in_address, 3, 0, 1, 2)
+            
+            f1.addWidget(label("Dòng chữ cuối vé (footer)", "muted"), 4, 0, 1, 2)
+            in_footer = QLineEdit(sys_settings.footer_text if sys_settings else "")
+            f1.addWidget(in_footer, 5, 0, 1, 2)
+            l1.addLayout(f1); left_col.addWidget(g1)
+            
+            # 2. Sức chứa
+            g2, l2 = make_group("Sức chứa bãi xe", "📉", "#3b82f6")
+            f2 = QGridLayout(); f2.setSpacing(12)
+            f2.addWidget(label("🚗 Tổng cộng", "muted"), 0, 0)
+            in_cap_total = QLineEdit(str(sys_settings.capacity_total if sys_settings else 0))
+            f2.addWidget(in_cap_total, 1, 0)
+            
+            f2.addWidget(label("🛵 Xe máy", "muted"), 0, 1)
+            in_cap_moto = QLineEdit(str(sys_settings.capacity_moto if sys_settings else 0))
+            f2.addWidget(in_cap_moto, 1, 1)
+            
+            f2.addWidget(label("🚗 Ô tô", "muted"), 0, 2)
+            in_cap_car = QLineEdit(str(sys_settings.capacity_car if sys_settings else 0))
+            f2.addWidget(in_cap_car, 1, 2)
+            
+            f2.addWidget(label("🚚 Xe tải", "muted"), 0, 3)
+            in_cap_truck = QLineEdit(str(sys_settings.capacity_truck if sys_settings else 0))
+            f2.addWidget(in_cap_truck, 1, 3)
+            l2.addLayout(f2); left_col.addWidget(g2)
+            
+            # 3. Thông số vận hành
+            g3, l3 = make_group("Thông số vận hành", "⚙️", "#22c55e")
+            f3 = QGridLayout(); f3.setSpacing(12)
+            f3.addWidget(label("Tự đóng barrier sau (giây)", "muted"), 0, 0)
+            in_barrier = QLineEdit(str(sys_settings.auto_barrier_delay_sec if sys_settings else 8))
+            f3.addWidget(in_barrier, 1, 0)
+            
+            f3.addWidget(label("Thời gian miễn phí (phút)", "muted"), 0, 1)
+            in_free = QLineEdit(str(sys_settings.free_time_mins if sys_settings else 5))
+            f3.addWidget(in_free, 1, 1)
+            
+            f3.addWidget(label("Ngưỡng tin cậy ANPR", "muted"), 0, 2)
+            in_anpr = QLineEdit(str(sys_settings.anpr_threshold if sys_settings else 0.7))
+            f3.addWidget(in_anpr, 1, 2)
+            
+            from PySide6.QtWidgets import QTimeEdit
+            from PySide6.QtCore import QTime
+            f3.addWidget(label("Phụ thu đêm từ", "muted"), 2, 0)
+            in_n_from = QTimeEdit()
+            if sys_settings and sys_settings.night_surcharge_from:
+                in_n_from.setTime(QTime.fromString(sys_settings.night_surcharge_from, "HH:mm"))
+            f3.addWidget(in_n_from, 3, 0)
+            
+            f3.addWidget(label("Phụ thu đêm đến", "muted"), 2, 1)
+            in_n_to = QTimeEdit()
+            if sys_settings and sys_settings.night_surcharge_to:
+                in_n_to.setTime(QTime.fromString(sys_settings.night_surcharge_to, "HH:mm"))
+            f3.addWidget(in_n_to, 3, 1)
+            
+            f3.addWidget(label("Port TCP Gateway", "muted"), 2, 2)
+            in_tcp = QLineEdit(str(sys_settings.tcp_port if sys_settings else 9001))
+            f3.addWidget(in_tcp, 3, 2)
+            l3.addLayout(f3); left_col.addWidget(g3)
+            
+            # 4. Thanh toán QR
+            g4, l4 = make_group("Thanh toán QR / Ngân hàng", "🪪", "#a855f7")
+            f4 = QGridLayout(); f4.setSpacing(12)
+            f4.addWidget(label("Ngân hàng", "muted"), 0, 0)
+            in_bank = QComboBox(); in_bank.addItems(["Chọn ngân hàng", "Vietcombank", "Techcombank", "MBBank", "BIDV"])
+            if sys_settings and sys_settings.bank_name: in_bank.setCurrentText(sys_settings.bank_name)
+            f4.addWidget(in_bank, 1, 0)
+            
+            f4.addWidget(label("Số tài khoản", "muted"), 0, 1)
+            in_acc = QLineEdit(sys_settings.bank_account_number if sys_settings else "")
+            f4.addWidget(in_acc, 1, 1)
+            
+            f4.addWidget(label("Tên chủ tài khoản", "muted"), 0, 2)
+            in_owner = QLineEdit(sys_settings.bank_account_name if sys_settings else "")
+            f4.addWidget(in_owner, 1, 2)
+            l4.addLayout(f4); left_col.addWidget(g4)
+            
+            # 5. Thông báo cảnh báo
+            g5, l5 = make_group("Thông báo cảnh báo", "🔔", "#ef4444")
+            f5 = QGridLayout(); f5.setSpacing(12)
+            f5.addWidget(label("Email nhận cảnh báo", "muted"), 0, 0)
+            in_email = QLineEdit(sys_settings.alert_email if sys_settings else "")
+            f5.addWidget(in_email, 1, 0)
+            l5.addLayout(f5); left_col.addWidget(g5)
+            
+            # Action buttons
+            btn_ly = QHBoxLayout(); btn_ly.addStretch()
+            btn_reset = QPushButton("Đặt lại")
+            btn_reset.setStyleSheet("background: white; border: 1px solid #cbd5e1; padding: 8px 16px; border-radius: 4px;")
+            btn_ly.addWidget(btn_reset)
+            
+            btn_save = QPushButton("Lưu cài đặt")
+            btn_save.setStyleSheet("background: #f97316; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold;")
+            btn_ly.addWidget(btn_save)
+            
+            def on_save():
+                data = {
+                    "parking_name": in_name.text(),
+                    "phone": in_phone.text(),
+                    "address": in_address.text(),
+                    "footer_text": in_footer.text(),
+                    "capacity_total": int(in_cap_total.text() or 0),
+                    "capacity_moto": int(in_cap_moto.text() or 0),
+                    "capacity_car": int(in_cap_car.text() or 0),
+                    "capacity_truck": int(in_cap_truck.text() or 0),
+                    "auto_barrier_delay_sec": int(in_barrier.text() or 8),
+                    "free_time_mins": int(in_free.text() or 5),
+                    "anpr_threshold": float(in_anpr.text() or 0.7),
+                    "night_surcharge_from": in_n_from.time().toString("HH:mm"),
+                    "night_surcharge_to": in_n_to.time().toString("HH:mm"),
+                    "tcp_port": int(in_tcp.text() or 9001),
+                    "bank_name": in_bank.currentText(),
+                    "bank_account_number": in_acc.text(),
+                    "bank_account_name": in_owner.text(),
+                    "alert_email": in_email.text()
+                }
+                asyncio.run(_save_sys_settings(settings, data))
+                QMessageBox.information(self, "Thành công", "Đã lưu cài đặt hệ thống!")
+                
+            btn_save.clicked.connect(on_save)
+            left_col.addLayout(btn_ly)
+            left_col.addStretch()
+            
+            # --- Cột phải ---
+            def make_stat_row(lbl, val, color="#1e293b"):
+                r = QHBoxLayout()
+                r.addWidget(label(lbl, "muted"))
+                r.addStretch()
+                v = label(val, bold=True)
+                v.setStyleSheet(f"color: {color}; border: none;")
+                r.addWidget(v)
+                return r
+                
+            rg1, rl1 = make_group("Thông tin hệ thống", "ℹ️", "#f97316")
+            rl1.addLayout(make_stat_row("Phiên bản", "1.0.0"))
+            sep1 = QFrame(); sep1.setFrameShape(QFrame.Shape.HLine); sep1.setStyleSheet("color: #e2e8f0; border: none; border-top: 1px solid #e2e8f0;"); rl1.addWidget(sep1)
+            rl1.addLayout(make_stat_row("Cơ sở dữ liệu", "SQLite"))
+            sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine); sep2.setStyleSheet("color: #e2e8f0; border: none; border-top: 1px solid #e2e8f0;"); rl1.addWidget(sep2)
+            rl1.addLayout(make_stat_row("TCP Gateway", "port 9001"))
+            sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.HLine); sep3.setStyleSheet("color: #e2e8f0; border: none; border-top: 1px solid #e2e8f0;"); rl1.addWidget(sep3)
+            rl1.addLayout(make_stat_row("API Server", "Đang chạy", "#16a34a"))
+            right_col.addWidget(rg1)
+            
+            rg2, rl2 = make_group("Thống kê dữ liệu", "📊", "#f97316")
+            
+            try:
+                import asyncio
+                from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSessionRepository
+                
+                async def fetch_stats():
+                    db = Database(settings.local_database_url)
+                    try:
+                        async with db.session() as session:
+                            s_repo = SQLiteSessionRepository(session)
+                            all_sessions = await s_repo.list_recent(settings.branch_id, 5000)
+                            
+                            active_count = sum(1 for s in all_sessions if s.status == "ACTIVE")
+                            from datetime import date
+                            today_count = sum(1 for s in all_sessions if s.entry_time.date() == date.today())
+                            return active_count, today_count
+                    finally:
+                        await db.dispose()
+                        
+                active_count, today_count = asyncio.run(fetch_stats())
+            except:
+                active_count, today_count = 0, 0
+                
+            rl2.addLayout(make_stat_row("Xe trong bãi", str(active_count)))
+            sep4 = QFrame(); sep4.setFrameShape(QFrame.Shape.HLine); sep4.setStyleSheet("color: #e2e8f0; border: none; border-top: 1px solid #e2e8f0;"); rl2.addWidget(sep4)
+            rl2.addLayout(make_stat_row("Lượt hôm nay", str(today_count)))
+            sep5 = QFrame(); sep5.setFrameShape(QFrame.Shape.HLine); sep5.setStyleSheet("color: #e2e8f0; border: none; border-top: 1px solid #e2e8f0;"); rl2.addWidget(sep5)
+            rl2.addLayout(make_stat_row("Phiên bản DB", "SQLite 3"))
+            right_col.addWidget(rg2)
+            
+            rg3, rl3 = make_group("Công suất hiện tại", "⚡", "#f97316")
+            if sys_settings and sys_settings.capacity_total > 0:
+                percent = int((active_count / sys_settings.capacity_total) * 100) if sys_settings.capacity_total > 0 else 0
+                lbl = label(f"Đã dùng {percent}% ({active_count}/{sys_settings.capacity_total})")
+            else:
+                lbl = label("Không giới hạn")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet("border: none;")
+            rl3.addWidget(lbl)
+            right_col.addWidget(rg3)
+            
+            rg4, rl4 = make_group("Sao lưu & Xuất", "💾", "#f97316")
+            btn_export = QPushButton("Xuất cài đặt (JSON)")
+            btn_export.setStyleSheet("background: white; border: 1px solid #3b82f6; color: #3b82f6; padding: 6px; border-radius: 4px; font-weight: bold;")
+            rl4.addWidget(btn_export)
+            
+            btn_import = QPushButton("Nhập cài đặt")
+            btn_import.setStyleSheet("background: white; border: 1px solid #cbd5e1; color: #475569; padding: 6px; border-radius: 4px; font-weight: bold;")
+            rl4.addWidget(btn_import)
+            
+            btn_api = QPushButton("API Documentation")
+            btn_api.setStyleSheet("background: white; border: 1px solid #cbd5e1; color: #475569; padding: 6px; border-radius: 4px; font-weight: bold;")
+            rl4.addWidget(btn_api)
+            right_col.addWidget(rg4)
+            
+            right_col.addStretch()
+            
+            scroll_ly = QHBoxLayout()
+            left_w = QWidget(); left_w.setLayout(left_col); scroll_ly.addWidget(left_w, 7)
+            right_w = QWidget(); right_w.setLayout(right_col); scroll_ly.addWidget(right_w, 3)
+            
+            scroll_content = QWidget(); scroll_content.setLayout(scroll_ly)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(scroll_content)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            box.addWidget(scroll, 1)
+            
+            return page
 
         def accounts_page(self) -> QWidget:
             page, box = self.page(); header = QHBoxLayout(); h = label("Tài khoản & phân quyền", bold=True); h.setStyleSheet("font-size:24px;"); header.addWidget(h); header.addStretch(); roles = QPushButton("⚿ Vai trò & quyền"); roles.clicked.connect(self.manage_roles); header.addWidget(roles); create = QPushButton("+ Tạo tài khoản"); create.setObjectName("primary"); create.clicked.connect(self.create_account); header.addWidget(create); box.addLayout(header); self.user_table = self.make_table(["Tên đăng nhập", "Họ tên", "Vai trò", "Trạng thái", "Thao tác"]); box.addWidget(self.user_table, 1); self.load_users(); return page
@@ -2221,3 +2694,20 @@ async def _save_role(settings: Settings, name: str, description: str, codes: set
     try:
         async with db.session() as session: return await SQLiteAuthorizationRepository(session).save_role(name, description, codes)
     finally: await db.dispose()
+async def _load_sys_settings(settings: Settings):
+    db = Database(settings.local_database_url)
+    try:
+        from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSettingsRepository
+        async with db.session() as session:
+            return await SQLiteSettingsRepository(session).get_settings()
+    finally:
+        await db.dispose()
+
+async def _save_sys_settings(settings: Settings, data: dict):
+    db = Database(settings.local_database_url)
+    try:
+        from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSettingsRepository
+        async with db.session() as session:
+            await SQLiteSettingsRepository(session).save_settings(data)
+    finally:
+        await db.dispose()

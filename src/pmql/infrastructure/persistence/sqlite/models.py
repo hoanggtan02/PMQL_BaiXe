@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Integer, String, Text, Float
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -265,3 +265,31 @@ class VehicleTypeModel(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SystemSettingsModel(Base):
+    __tablename__ = "system_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default="default")
+    parking_name: Mapped[str] = mapped_column(String(100), default="Bãi Giữ Xe PMQL")
+    phone: Mapped[str] = mapped_column(String(20), default="", nullable=True)
+    address: Mapped[str] = mapped_column(String(200), default="", nullable=True)
+    footer_text: Mapped[str] = mapped_column(String(200), default="", nullable=True)
+    
+    capacity_total: Mapped[int] = mapped_column(Integer, default=0)
+    capacity_moto: Mapped[int] = mapped_column(Integer, default=0)
+    capacity_car: Mapped[int] = mapped_column(Integer, default=0)
+    capacity_truck: Mapped[int] = mapped_column(Integer, default=0)
+    
+    auto_barrier_delay_sec: Mapped[int] = mapped_column(Integer, default=8)
+    free_time_mins: Mapped[int] = mapped_column(Integer, default=5)
+    anpr_threshold: Mapped[float] = mapped_column(Float, default=0.7)
+    night_surcharge_from: Mapped[str] = mapped_column(String(10), default="22:00")
+    night_surcharge_to: Mapped[str] = mapped_column(String(10), default="06:00")
+    tcp_port: Mapped[int] = mapped_column(Integer, default=9001)
+    
+    bank_name: Mapped[str] = mapped_column(String(100), default="", nullable=True)
+    bank_account_number: Mapped[str] = mapped_column(String(50), default="", nullable=True)
+    bank_account_name: Mapped[str] = mapped_column(String(100), default="", nullable=True)
+    
+    alert_email: Mapped[str] = mapped_column(String(100), default="", nullable=True)

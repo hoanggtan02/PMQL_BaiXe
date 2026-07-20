@@ -153,3 +153,52 @@ Khi AI được yêu cầu sửa một tính năng, chỉ đọc file map tươn
 - [ ] Sau CRUD gọi `self.reload_page(key)`
 - [ ] DB helper async `_xxx(settings)` đặt ngoài `launch()`, sau class `Main`
 - [ ] Cột mới = migration trong `database.py`
+
+---
+
+## 8. UI Border Rules (KHÔNG được vi phạm)
+
+> **Nguyên tắc: Ít border hơn = giao diện đẹp hơn.**
+
+### 8.1 Global QFrame
+```python
+# ĐÚNG — Frame chứa nội dung KHÔNG có border, chỉ dùng background + border-radius
+g = QFrame(); g.setStyleSheet("QFrame { background: white; border: none; border-radius: 8px; }")
+
+# SAI — Tạo double-border vì QLineEdit bên trong cũng có border
+g = QFrame(); g.setStyleSheet("QFrame { border: 1px solid #e2e8f0; }")
+```
+
+### 8.2 QLineEdit / QComboBox
+- Global theme (`components.py`) đã định nghĩa `border: none; border-bottom: 1px solid #cbd5e1;`
+- **KHÔNG được** set thêm `border:` inline trên QLineEdit/QComboBox trừ khi bị yêu cầu rõ ràng
+- Khi cần scope riêng: dùng `objectName` + CSS selector `QLineEdit#myName { ... }`
+
+### 8.3 QFrame tách biệt (separator)
+```python
+# ĐÚNG — Separator dùng HLine với border-top
+sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+sep.setStyleSheet("border: none; border-top: 1px solid #e2e8f0;")
+
+# SAI — setStyleSheet("color: #e2e8f0;") trên HLine không có tác dụng trên nền trắng
+```
+
+### 8.4 QTableWidget
+- Chỉ có border ngoài cùng, gridline-color đã được set trong theme
+- **KHÔNG thêm** border inline cho table cells hoặc header
+
+---
+
+## 9. Repository Method Rules
+
+Trước khi gọi method trên repository, PHẢI kiểm tra method có tồn tại không:
+
+| Repository | Các method có sẵn |
+|-----------|-------------------|
+| `SQLiteLaneRepository` | `get_by_id`, `list_active`, `create`, `update` |
+| `SQLiteVehicleRepository` | `create`, `get_by_rfid`, `list_by_subscriber` |
+| `SQLiteSessionRepository` | `list_recent(branch_id, limit)`, `get_active_by_plate` |
+| `SQLiteSettingsRepository` | `get_settings()`, `save_settings(data: dict)` |
+
+> **KHÔNG dùng** `list_all()` trên `SQLiteVehicleRepository` hay `list_by_branch()` trên `SQLiteLaneRepository` — các method này không tồn tại.
+> Dùng `_vehicle_name_map(settings)` để lấy map loại xe.
