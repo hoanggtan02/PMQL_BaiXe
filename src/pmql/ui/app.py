@@ -18,6 +18,14 @@ from pmql.domain.entities.card import Card
 from pmql.domain.entities.lane import Lane
 from pmql.domain.services.fee_calculator import FeeCalculator
 from pmql.infrastructure.hardware.mock_hardware import MockBarrierController
+from pmql.infrastructure.hardware.rfid_tcp import run_rfid_server_in_thread
+from PySide6.QtCore import QObject, Signal
+
+class HardwareSignals(QObject):
+    rfid_scanned = Signal(str, str)  # ip_address, rfid_code
+
+global_hw_signals = HardwareSignals()
+
 from pmql.infrastructure.persistence.sqlite.database import Database
 from pmql.infrastructure.persistence.sqlite.authorization_repository import SQLiteAuthorizationRepository
 from pmql.infrastructure.persistence.sqlite.vehicle_type_repository import SQLiteVehicleTypeRepository
@@ -82,6 +90,14 @@ def launch(settings: Settings) -> int:
         _HAS_QTA = True
     except ImportError:
         _HAS_QTA = False
+
+    # Start background TCP Server for RFID
+    def on_rfid_read(ip, rfid_code):
+        global_hw_signals.rfid_scanned.emit(ip, rfid_code)
+    
+    # Run on default port 9001 (can be taken from settings in the future)
+    run_rfid_server_in_thread(9001, on_rfid_read)
+
 
     # --- Icon button helper ---
     _BTN_ICON_STYLE = (
@@ -233,6 +249,28 @@ def launch(settings: Settings) -> int:
             btn_finance = QPushButton("📊 Thu/Chi")
             sub_toolbar.addWidget(btn_operate); sub_toolbar.addWidget(btn_camera); sub_toolbar.addWidget(btn_finance); sub_toolbar.addStretch()
             box.addLayout(sub_toolbar)
+            
+            # --- TCP RFID Hook ---
+            def handle_rfid_scan(ip_addr: str, rfid_code: str):
+                # Put the RFID code into the first lane's UID input
+                for i in range(grid.count()):
+                    item = grid.itemAt(i)
+                    if item and item.widget():
+                        w = item.widget()
+                        # Find the first QLineEdit with placeholder "Ma the (UID)"
+                        from PySide6.QtWidgets import QLineEdit
+                        for le in w.findChildren(QLineEdit):
+                            if "UID" in le.placeholderText():
+                                le.setText(rfid_code)
+                                # Automatically click the "Vao" or "Ra" button depending on direction?
+                                # For MVP, we just fill the text and let operator click, or 
+                                # trigger entry automatically if it's IN lane, exit if OUT lane.
+                                # Let's just fill it for now.
+                                return
+                                
+            # Connect the signal
+            global_hw_signals.rfid_scanned.connect(handle_rfid_scan)
+
             
             # --- Metric Bar ---
             metric_bar = QFrame(); metric_bar.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1e1b4b, stop:1 #312e81); border-radius: 8px; padding: 10px;")
