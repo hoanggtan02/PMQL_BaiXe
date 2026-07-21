@@ -202,3 +202,96 @@ Trước khi gọi method trên repository, PHẢI kiểm tra method có tồn t
 
 > **KHÔNG dùng** `list_all()` trên `SQLiteVehicleRepository` hay `list_by_branch()` trên `SQLiteLaneRepository` — các method này không tồn tại.
 > Dùng `_vehicle_name_map(settings)` để lấy map loại xe.
+
+---
+
+## 10. UI Design Philosophy (Frontend Design Rules)
+
+> Áp dụng khi thiết kế lại hoặc xây dựng trang mới trong ứng dụng PySide6.
+
+### 10.1 Nguyên tắc chung
+
+Tiếp cận như **design lead tại một studio nhỏ** — mỗi màn hình phải có bản sắc thị giác riêng, không thể nhầm lẫn với template mặc định. Client đã từ chối các đề xuất trông như template.
+
+**Trước khi code bất cứ thứ gì, phải xác định:**
+1. Màn hình này phục vụ **ai** (operator bãi xe, quản lý, admin)?
+2. **Công việc duy nhất** của màn hình này là gì?
+3. **Một rủi ro thẩm mỹ có chủ đích** mà bạn có thể biện hộ?
+
+### 10.2 Thiết kế bằng nội dung thật
+
+- **KHÔNG dùng** placeholder text kiểu "Lorem ipsum" hay label chung chung như "Thông tin"
+- Lấy từ vựng từ **domain bãi xe** cụ thể: biển số, ca trực, RFID, cổng chắn, lượt xe, doanh thu ca
+- Trạng thái rỗng (empty state) = **lời mời hành động**, không phải thông báo buồn tẻ
+  - ❌ "Chưa có dữ liệu"
+  - ✅ "Chưa có xe trong bãi — mở ca làm việc để bắt đầu ghi nhận"
+
+### 10.3 Palette và Typography
+
+**Palette chuẩn (đã định nghĩa trong `components.py`)**:
+- Sidebar: `#0f172a` (dark navy)
+- Background: `#f8fafc`
+- Card/Panel: `#ffffff`
+- Accent primary: `#f97316` (orange — màu chủ đạo, dùng có tiết chế)
+- Accent success: `#10b981`, danger: `#ef4444`, info: `#3b82f6`
+
+**Quy tắc typography:**
+- Dùng font `Segoe UI` / `Inter` — đã set trong THEME global
+- Tiêu đề trang: `font-size: 24px; font-weight: 700`
+- Metric lớn (số liệu dashboard): `font-size: 28–36px; font-weight: 800`
+- Label phụ/caption: `font-size: 11–12px; color: #64748b`
+- **KHÔNG dùng** font-size dưới 10px hay trên 40px trừ khi có lý do rõ ràng
+
+### 10.4 Layout và Cấu trúc
+
+**Nguyên tắc:**
+- Cấu trúc phải **mã hóa thông tin**, không phải trang trí
+- Dùng **spacing nhất quán**: 8, 12, 16, 20, 24, 28px
+- Grid/panel chia theo tỷ lệ có nghĩa: 3:2, 2:1, 1:1 — không phải ngẫu nhiên
+- **Mỗi trang có một điểm nhấn thị giác duy nhất** (signature element)
+  - Dashboard: 4 metric cards gradient màu sắc
+  - Operations: lane card với nút hành động lớn
+  - Settings: form sạch với section divider rõ ràng
+
+**ASCII wireframe trước khi code** nếu layout phức tạp:
+```
+┌─ Metric ──┬─ Metric ──┬─ Metric ──┬─ Metric ─┐
+│           │           │           │          │
+├─ Lanes ───┴──────────┬─ Chart ───────────────┤
+│ Lane 1 → [Chờ xe]    │ 0.9 ▂▃▅▇ 23h         │
+│ Lane 2 ← [Đang có]   │                       │
+├─ Table (3fr) ────────┴─ Stats (2fr) ─────────┤
+│ Biển số │ Loại │ Thời gian  │ Thuê bao: 0    │
+└──────────────────────────────────────────────┘
+```
+
+### 10.5 Motion và Interaction
+
+- **Dùng motion có mục đích**, không rải hiệu ứng khắp nơi
+- Micro-interaction đáng dùng trong PySide6:
+  - Hover state trên button/row table: thay đổi background color (qua CSS)
+  - `setCursor(Qt.CursorShape.PointingHandCursor)` cho mọi nút có thể click
+  - Thay đổi màu badge theo trạng thái dữ liệu thật
+- **KHÔNG animate** những thứ không carry thông tin
+
+### 10.6 Ngôn ngữ UI (Copy)
+
+- **Active voice**: "Lưu thay đổi" không phải "Submit"; "Mở ca" không phải "Bắt đầu"
+- **Nhất quán**: nút gọi là "Xóa" thì toast cũng phải nói "Đã xóa"
+- **Error messages**: nói rõ vấn đề + cách fix
+  - ❌ "Đã xảy ra lỗi"
+  - ✅ "Không thể lưu: Biển số không được để trống"
+- **Label từ góc nhìn người dùng**, không từ góc nhìn hệ thống:
+  - ❌ "Session ID", "FK violation"
+  - ✅ "Phiên gửi xe", "Biển số đã tồn tại"
+
+### 10.7 Checklist trước khi submit thiết kế mới
+
+- [ ] Có **signature element** không bị lẫn với màn hình khác
+- [ ] Palette chỉ dùng màu từ token system (không thêm màu ad-hoc vô tội vạ)
+- [ ] Spacing nhất quán theo bội số 4px
+- [ ] Empty state có **lời mời hành động** cụ thể
+- [ ] Button text là **động từ rõ ràng**
+- [ ] `PointingHandCursor` cho mọi phần tử tương tác
+- [ ] Không có border thừa (xem Rule 8)
+- [ ] Đã tự hỏi: *"Màn hình này trông có giống template mặc định không?"*
