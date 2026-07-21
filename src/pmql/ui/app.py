@@ -41,34 +41,6 @@ from pmql.ui.components import LIGHT_THEME as THEME, modal_shell
 
 DEFAULT_LANE_ID = "lane-main-in-out"
 
-LEGACY_THEME = """
-* { font-family: 'Segoe UI', Arial; font-size: 13px; color: #f8fafc; }
-QMainWindow, QWidget#root, QWidget#page { background: #1e1e2f; }
-QFrame#sidebar { background: #171724; border-right: 1px solid #303047; }
-QFrame#header, QFrame#card, QFrame#panel { background: #27293d; border: 1px solid #353750; border-radius: 10px; }
-QFrame#header { border-radius: 0; border-left: 0; border-right: 0; }
-QLabel#muted { color: #a3a6b4; }
-QLabel#section { color: #85889b; font-size: 10px; font-weight: 700; padding: 12px 14px 5px; }
-QLabel#badge { background: #193c2c; color: #70e1a1; border-radius: 10px; padding: 4px 9px; font-size: 10px; font-weight: 700; }
-QLabel#metricValue { font-size: 27px; font-weight: 700; color: #ffffff; }
-QLabel#metricCaption { color: #a3a6b4; font-size: 11px; }
-QLineEdit, QComboBox { color: #f8fafc; background: #202134; border: 1px solid #3a3b56; border-radius: 8px; padding: 9px 11px; }
-QLineEdit:focus, QComboBox:focus { border: 1px solid #3b82f6; }
-QPushButton { background: #363850; color: #ffffff; border: 0; border-radius: 8px; padding: 9px 13px; font-weight: 600; }
-QPushButton:hover { background: #454866; }
-QPushButton#nav { background: transparent; color: #a3a6b4; text-align: left; padding: 11px 14px; }
-QPushButton#nav:hover { background: #292a3d; color: white; }
-QPushButton#nav[active='true'] { background: #3b82f6; color: white; }
-QPushButton#primary { background: #3b82f6; color: white; }
-QPushButton#primary:hover { background: #2563eb; }
-QPushButton#success { background: #16a36b; color: white; }
-QPushButton#danger { background: #e05252; color: white; }
-QTableWidget { background: #27293d; alternate-background-color: #222338; color: #f8fafc; border: 1px solid #353750; border-radius: 9px; gridline-color: #303146; selection-background-color: #3b82f6; }
-QHeaderView::section { background: #202134; color: #a3a6b4; border: 0; border-bottom: 1px solid #393b52; padding: 11px; font-weight: 700; }
-QScrollBar:vertical { background: #1e1e2f; width: 10px; } QScrollBar::handle:vertical { background: #454866; border-radius: 5px; }
-"""
-
-
 def launch(settings: Settings) -> int:
     """Launch UI; all pages share one MainWindow and one QStackedWidget."""
     try:
@@ -122,6 +94,7 @@ def launch(settings: Settings) -> int:
             btn.setText(text)
         btn.setStyleSheet(style)
         btn.setFixedHeight(30)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
         return btn
 
     def label(text: str, name: str = "", bold: bool = False, style: str = "") -> QLabel:
@@ -191,19 +164,21 @@ def launch(settings: Settings) -> int:
             user_label = label("Tên đăng nhập"); user_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;")
             form.addWidget(user_label)
             self.username = QLineEdit("admin"); self.username.setPlaceholderText("admin")
-            self.username.setStyleSheet("QLineEdit { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; font-size: 14px; } QLineEdit:focus { border: 1.5px solid #f97316; background: #ffffff; }")
+            self.username.setStyleSheet("QLineEdit { padding: 12px 16px; font-size: 14px; }")
             form.addWidget(self.username); form.addSpacing(16)
 
             pass_label = label("Mật khẩu"); pass_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;")
             form.addWidget(pass_label)
             self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.EchoMode.Password); self.password.setPlaceholderText("••••••••")
-            self.password.setStyleSheet("QLineEdit { background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; font-size: 14px; } QLineEdit:focus { border: 1.5px solid #f97316; background: #ffffff; }")
+            self.password.setStyleSheet("QLineEdit { padding: 12px 16px; font-size: 14px; }")
             form.addWidget(self.password); form.addSpacing(24)
 
             submit = QPushButton("Đăng nhập")
             submit.setObjectName("primary")
+            submit.setCursor(Qt.CursorShape.PointingHandCursor)
+            submit.setObjectName("primary")
             submit.setFixedHeight(48)
-            submit.setStyleSheet("QPushButton { background: #f97316; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; } QPushButton:hover { background: #ea580c; }")
+            submit.setStyleSheet("QPushButton { font-size: 15px; font-weight: 700; }")
             submit.clicked.connect(self.sign_in); self.password.returnPressed.connect(self.sign_in)
             form.addWidget(submit)
 
@@ -233,6 +208,14 @@ def launch(settings: Settings) -> int:
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
             self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": lambda: self.table_page("Cảnh báo", ["Loại", "Mức độ", "Nội dung", "Thời gian", "Trạng thái"], _alert_rows), "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "settings": self.settings_page, "hardware": self.hardware_page}
             self.pages = {key: factory() for key, factory in self.page_factories.items()}
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: [self._apply_interaction_cursors(page) for page in self.pages.values()])
+
+            for page in self.pages.values():
+                self.stack.addWidget(page)
+            self.go("overview")
+
+        def build_sidebar(self) -> QWidget:
             from PySide6.QtCore import QTimer
             side = QFrame(); side.setObjectName("sidebar")
             side.setMinimumWidth(240); side.setMaximumWidth(256)
@@ -367,6 +350,7 @@ def launch(settings: Settings) -> int:
             old_page.deleteLater()
             self.stack.insertWidget(index, new_page)
             self.pages[key] = new_page
+            self._apply_interaction_cursors(new_page)
             self.go(key)
 
         def page(self) -> tuple[QWidget, QVBoxLayout]:
@@ -374,35 +358,42 @@ def launch(settings: Settings) -> int:
             box = QVBoxLayout(page); box.setContentsMargins(24, 20, 24, 20); box.setSpacing(14)
             return page, box
 
+        def _apply_interaction_cursors(self, root: QWidget) -> None:
+            """Give every interactive control the same clear affordance."""
+            for control in root.findChildren(QPushButton):
+                control.setCursor(Qt.CursorShape.PointingHandCursor)
+            for control in root.findChildren(QComboBox):
+                control.setCursor(Qt.CursorShape.PointingHandCursor)
+
         def card(self, caption: str, value: str = "—") -> tuple[QFrame, QLabel]:
             frame = QFrame(); frame.setObjectName("card"); box = QVBoxLayout(frame); box.setContentsMargins(18, 16, 18, 16); box.addWidget(label(caption, "metricCaption")); number = label(value, "metricValue", True); box.addWidget(number); return frame, number
 
         def overview_page(self) -> QWidget:
             page, box = self.page()
-            box.setContentsMargins(20, 16, 20, 16)
-            box.setSpacing(12)
+            box.setContentsMargins(24, 20, 24, 20)
+            box.setSpacing(16)
 
             # ── Metric cards row ──────────────────────────────────────
             cards_row = QHBoxLayout(); cards_row.setSpacing(12)
             metric_defs = [
-                ("Xe đang trong bãi", "2",      "0% công suất (60 chỗ giới hạn chỗ)", "#2563eb", "#1d4ed8"),
-                ("Lượt xe hôm nay",   "0",      "Ra: 0",                               "#16a34a", "#15803d"),
-                ("Doanh thu hôm nay", "0 đ",    "Tháng: 0 đ",                          "#ea580c", "#c2410c"),
-                ("Cảnh báo chờ xử lý","0",     "Xem sự cố →",                         "#dc2626", "#b91c1c"),
+                ("Xe đang trong bãi", "2", "0% công suất (60 chỗ giới hạn chỗ)", "🚙", "#2563eb"),
+                ("Lượt vào hôm nay", "0", "Ra: 0", "↪", "#16a34a"),
+                ("Doanh thu hôm nay", "0 đ", "Tháng: 0 đ", "💵", "#ea580c"),
+                ("Cảnh báo chờ xử lý", "0", "Xem và xử lý →", "⚠", "#dc2626"),
             ]
             self.overview_values = []
             self.overview_sub_labels = []
-            for title_txt, init_val, subtitle, bg, bg_dark in metric_defs:
+            for title_txt, init_val, subtitle, icon, bg in metric_defs:
                 card = QFrame()
                 card.setStyleSheet(f"QFrame {{ background: {bg}; border-radius: 12px; border: none; }}")
+                card.setMinimumHeight(142)
                 card_box = QVBoxLayout(card); card_box.setContentsMargins(18, 16, 18, 16); card_box.setSpacing(4)
                 top_row = QHBoxLayout()
                 ttl = label(title_txt)
                 ttl.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 12px; font-weight: 600;")
                 top_row.addWidget(ttl); top_row.addStretch()
-                # icon placeholder
-                icon_lbl = label("▦")
-                icon_lbl.setStyleSheet(f"color: rgba(255,255,255,0.3); font-size: 28px;")
+                icon_lbl = label(icon)
+                icon_lbl.setStyleSheet("color: rgba(255,255,255,0.30); font-size: 28px;")
                 top_row.addWidget(icon_lbl)
                 card_box.addLayout(top_row)
                 val_lbl = label(init_val, bold=True)
@@ -435,8 +426,10 @@ def launch(settings: Settings) -> int:
             lane_header.addWidget(lane_title_lbl); lane_header.addStretch()
             refresh_icon = icon_btn("fa5s.sync-alt", "", _BTN_PLAIN_STYLE, 14)
             refresh_icon.setFixedSize(30, 30)
+            refresh_icon.clicked.connect(self.refresh_live)
             operate_btn = QPushButton("Vận hành")
-            operate_btn.setStyleSheet("background: #f97316; color: white; border: none; border-radius: 6px; padding: 6px 16px; font-weight: 700;")
+            operate_btn.setObjectName("primary")
+            operate_btn.setStyleSheet("QPushButton { padding: 6px 16px; font-weight: 700; }")
             operate_btn.clicked.connect(lambda: self.go("operations"))
             lane_header.addWidget(refresh_icon); lane_header.addWidget(operate_btn)
             lane_layout.addLayout(lane_header)
@@ -446,7 +439,7 @@ def launch(settings: Settings) -> int:
             except Exception: lanes_data = []
             for lane in lanes_data:
                 row_w = QFrame()
-                row_w.setStyleSheet("QFrame { background: #f8fafc; border-radius: 8px; border: none; }")
+                row_w.setStyleSheet("QFrame { background: #ffffff; border-radius: 8px; border: none; }")
                 row_lay = QHBoxLayout(row_w); row_lay.setContentsMargins(12, 8, 12, 8); row_lay.setSpacing(10)
                 # direction arrow
                 arrow = "→" if lane.direction == "IN" else ("←" if lane.direction == "OUT" else "⇄")
@@ -466,44 +459,60 @@ def launch(settings: Settings) -> int:
                 status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; border-radius: 10px; padding: 3px 10px; font-size: 11px;")
                 row_lay.addWidget(status_badge)
                 lane_layout.addWidget(row_w)
+                if lane != lanes_data[-1]:
+                    sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+                    sep.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
+                    lane_layout.addWidget(sep)
                 self.overview_lane_rows.append((sub_lbl2, status_badge))
             if not lanes_data:
                 lane_layout.addWidget(label("Chưa có làn hoạt động.", "muted"))
             lane_layout.addStretch()
-            mid_row.addWidget(lane_panel, 1)
+            mid_row.addWidget(lane_panel, 2)
 
             # Right: Revenue chart (placeholder)
             chart_panel = QFrame(); chart_panel.setObjectName("panel")
             chart_layout = QVBoxLayout(chart_panel); chart_layout.setContentsMargins(16, 14, 16, 14); chart_layout.setSpacing(8)
             chart_header = QHBoxLayout()
-            chart_title = label("⚡ Doanh thu theo giờ", bold=True)
+            chart_title = label("◱  Doanh thu theo giờ", bold=True)
             chart_title.setStyleSheet("font-size: 14px;")
             chart_header.addWidget(chart_title); chart_header.addStretch()
             btn_day = QPushButton("Hôm nay")
-            btn_day.setStyleSheet("background: #1e293b; color: white; border: none; border-radius: 6px; padding: 4px 12px; font-size: 12px;")
+            btn_day.setStyleSheet("background: #64748b; color: white; border: none; border-radius: 6px; padding: 4px 12px; font-size: 12px;")
             btn_week = QPushButton("Tuần")
             btn_week.setStyleSheet("background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 12px; font-size: 12px;")
+            def set_chart_period(period: str) -> None:
+                active, inactive = (btn_day, btn_week) if period == "day" else (btn_week, btn_day)
+                active.setStyleSheet("background: #64748b; color: white; border: none; border-radius: 6px; padding: 4px 12px; font-size: 12px;")
+                inactive.setStyleSheet("background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 12px; font-size: 12px;")
+            btn_day.clicked.connect(lambda: set_chart_period("day"))
+            btn_week.clicked.connect(lambda: set_chart_period("week"))
             chart_header.addWidget(btn_day); chart_header.addWidget(btn_week)
             chart_layout.addLayout(chart_header)
 
-            # Simple text-based chart placeholder showing hour axis
+            # A lightweight grid keeps the revenue scale understandable before data is present.
             chart_area = QFrame()
             chart_area.setStyleSheet("background: white; border-radius: 8px; border: none;")
-            chart_area.setMinimumHeight(200)
-            chart_inner = QVBoxLayout(chart_area); chart_inner.setContentsMargins(8, 8, 8, 8)
-            chart_placeholder = label("(Biểu đồ doanh thu theo giờ - đang tải dữ liệu...)", "muted")
-            chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chart_inner.addWidget(chart_placeholder, 1)
-            # Hour axis labels
+            chart_area.setMinimumHeight(245)
+            chart_inner = QGridLayout(chart_area); chart_inner.setContentsMargins(6, 6, 6, 2); chart_inner.setSpacing(0)
+            for row, value in enumerate(range(10, -1, -1)):
+                y_label = label("1" if value == 10 else ("0" if value == 0 else f"0.{value}"))
+                y_label.setStyleSheet("color: #64748b; font-size: 9px;")
+                y_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                chart_inner.addWidget(y_label, row, 0)
+                line = QFrame(); line.setFrameShape(QFrame.Shape.HLine)
+                line.setStyleSheet("border: none; border-top: 1px solid #e2e8f0;")
+                chart_inner.addWidget(line, row, 1)
+                chart_inner.setRowStretch(row, 1)
             hour_row = QHBoxLayout(); hour_row.setSpacing(0)
-            for h in range(0, 24, 2):
+            for h in range(24):
                 h_lbl = label(f"{h}h")
                 h_lbl.setStyleSheet("color: #94a3b8; font-size: 9px;")
                 h_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 hour_row.addWidget(h_lbl, 1)
-            chart_inner.addLayout(hour_row)
+            chart_inner.addLayout(hour_row, 11, 1)
+            chart_inner.setColumnStretch(1, 1)
             chart_layout.addWidget(chart_area, 1)
-            mid_row.addWidget(chart_panel, 1)
+            mid_row.addWidget(chart_panel, 3)
             box.addLayout(mid_row)
 
             # ── Bottom row: Active vehicles table  |  Breakdown + stats ─
@@ -533,12 +542,12 @@ def launch(settings: Settings) -> int:
             hdr = self.live_table.horizontalHeader()
             for i in range(6): hdr.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
             self.live_table.setStyleSheet(
-                "QTableWidget { border: none; background: white; border-radius: 8px; }"
-                "QHeaderView::section { background: white; color: #94a3b8; font-size: 10px; font-weight: 700; border: none; border-bottom: 1px solid #f1f5f9; padding: 8px; }"
+                "QTableWidget { border: 1px solid #e2e8f0; background: white; border-radius: 8px; }"
+                "QHeaderView::section { background: #f8fafc; color: #64748b; font-size: 10px; font-weight: 700; border: none; border-bottom: 1px solid #e2e8f0; padding: 8px; }"
                 "QTableWidget::item { padding: 8px 4px; border-bottom: 1px solid #f8fafc; }"
             )
             veh_layout.addWidget(self.live_table, 1)
-            bot_row.addWidget(veh_panel, 3)
+            bot_row.addWidget(veh_panel, 2)
 
             # Right: Vehicle type breakdown + quick stats
             right_col = QVBoxLayout(); right_col.setSpacing(12)
@@ -583,7 +592,7 @@ def launch(settings: Settings) -> int:
                 sep.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
                 stats_layout.addWidget(sep)
             right_col.addWidget(stats_panel)
-            bot_row.addLayout(right_col, 2)
+            bot_row.addLayout(right_col, 1)
             box.addLayout(bot_row)
             return page
 
@@ -795,7 +804,7 @@ def launch(settings: Settings) -> int:
             try: stats = asyncio.run(_stats(settings, self.shift_id))
             except Exception: stats = {"revenue": 0}
             
-            summary = QFrame(); summary.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;")
+            summary = QFrame(); summary.setObjectName("softSurface")
             sv = QVBoxLayout(summary)
             row1 = QHBoxLayout(); row1.addWidget(label("Tiền đầu ca", "muted")); row1.addStretch(); row1.addWidget(label("0 đ", bold=True)); sv.addLayout(row1)
             row2 = QHBoxLayout(); row2.addWidget(label("Doanh thu hệ thống", "muted")); row2.addStretch(); row2.addWidget(label(f"{stats.get('revenue', 0):,} đ", bold=True)); sv.addLayout(row2)
@@ -836,6 +845,7 @@ def launch(settings: Settings) -> int:
             table.verticalHeader().setVisible(False)
             table.setMinimumHeight(max(220, minimum_rows * 38))
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            table.setCursor(Qt.CursorShape.PointingHandCursor)
             hdr = table.horizontalHeader()
             hdr.setMinimumSectionSize(120)
             for i in range(len(headers) - 1):
@@ -853,7 +863,10 @@ def launch(settings: Settings) -> int:
                 except Exception as exc: QMessageBox.warning(self, "Không tải được dữ liệu", str(exc)); return
                 table.setRowCount(len(rows))
                 for r, values in enumerate(rows):
-                    for c, value in enumerate(values): table.setItem(r, c, QTableWidgetItem(str(value)))
+                    for c, value in enumerate(values):
+                        item = QTableWidgetItem(str(value))
+                        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        table.setItem(r, c, item)
                 table.resizeColumnsToContents()
             def filter_rows(query: str) -> None:
                 for r in range(table.rowCount()): table.setRowHidden(r, bool(query) and query.lower() not in " ".join(table.item(r,c).text().lower() for c in range(table.columnCount()) if table.item(r,c)))
@@ -869,7 +882,7 @@ def launch(settings: Settings) -> int:
             # Stats Card
             stat_frame = QFrame()
             stat_frame.setObjectName("stat_frame")
-            stat_frame.setStyleSheet("QFrame#stat_frame { background: white; border: 1px solid #22c55e; border-radius: 8px; }")
+            stat_frame.setStyleSheet("QFrame#stat_frame { background: #ecfdf5; border: none; border-radius: 8px; }")
             stat_frame.setFixedSize(160, 80)
             stat_layout = QVBoxLayout(stat_frame)
             stat_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -888,7 +901,7 @@ def launch(settings: Settings) -> int:
             
             # Tabs
             tabs = QTabWidget()
-            tabs.setStyleSheet("QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 4px; background: white; } QTabBar::tab { background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 16px; margin-right: 2px; border-top-left-radius: 4px; border-top-right-radius: 4px; color: #64748b; font-weight: bold; } QTabBar::tab:selected { background: white; border-bottom-color: white; color: #0f172a; }")
+            tabs.setStyleSheet("QTabWidget::pane { border: none; background: transparent; } QTabBar::tab { background: transparent; padding: 8px 16px; margin-right: 2px; color: #64748b; font-weight: 700; } QTabBar::tab:selected { color: #f97316; border-bottom: 2px solid #f97316; }")
             
             tab_active = QWidget(); tab_active_ly = QVBoxLayout(tab_active)
             tab_history = QWidget(); tab_history_ly = QVBoxLayout(tab_history)
@@ -1079,7 +1092,7 @@ def launch(settings: Settings) -> int:
             tabs.setStyleSheet("QTabWidget::pane { border: none; border-top: 1px solid #e0e7f0; top: -1px; } QTabBar::tab { background: transparent; color: #94a3b8; padding: 12px 20px; font-weight: 700; font-size: 14px; border: none; border-bottom: 2px solid transparent; margin-right: 4px; } QTabBar::tab:selected { color: #f97316; border-bottom: 2px solid #f97316; } QTabBar::tab:hover { color: #1e293b; }")
 
             current_tab = QWidget(); current_layout = QVBoxLayout(current_tab); current_layout.setAlignment(Qt.AlignmentFlag.AlignTop); current_layout.setContentsMargins(0, 20, 0, 0)
-            self.current_shift_banner = QFrame(); self.current_shift_banner.setObjectName("card"); self.current_shift_banner.setStyleSheet("#card { background: #ecfdf5; border: 1px solid #d1fae5; border-radius: 12px; padding: 24px; }")
+            self.current_shift_banner = QFrame(); self.current_shift_banner.setObjectName("card"); self.current_shift_banner.setStyleSheet("#card { background: #ecfdf5; border: none; border-radius: 12px; padding: 24px; }")
             banner_layout = QVBoxLayout(self.current_shift_banner); banner_layout.setSpacing(12)
             
             banner_top_row = QHBoxLayout()
@@ -1099,8 +1112,8 @@ def launch(settings: Settings) -> int:
             
             banner_top_row.addLayout(banner_left); banner_top_row.addStretch()
             
-            self.btn_open_shift = QPushButton("▶ Mở ca làm việc"); self.btn_open_shift.setCursor(Qt.CursorShape.PointingHandCursor); self.btn_open_shift.setStyleSheet("background: #16a34a; color: white; border: none; border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: bold;"); self.btn_open_shift.clicked.connect(self.add_shift)
-            self.btn_close_shift = QPushButton("■ Đóng ca"); self.btn_close_shift.setCursor(Qt.CursorShape.PointingHandCursor); self.btn_close_shift.setStyleSheet("background: #ef4444; color: white; border: none; border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: bold;"); self.btn_close_shift.clicked.connect(self.close_shift_dialog); self.btn_close_shift.hide()
+            self.btn_open_shift = QPushButton("▶ Mở ca làm việc"); self.btn_open_shift.setObjectName("success"); self.btn_open_shift.setCursor(Qt.CursorShape.PointingHandCursor); self.btn_open_shift.setStyleSheet("QPushButton { padding: 10px 24px; font-size: 14px; font-weight: bold; }"); self.btn_open_shift.clicked.connect(self.open_shift)
+            self.btn_close_shift = QPushButton("■ Đóng ca"); self.btn_close_shift.setObjectName("danger"); self.btn_close_shift.setCursor(Qt.CursorShape.PointingHandCursor); self.btn_close_shift.setStyleSheet("QPushButton { padding: 10px 24px; font-size: 14px; font-weight: bold; }"); self.btn_close_shift.clicked.connect(self.close_shift); self.btn_close_shift.hide()
             
             btn_layout = QVBoxLayout(); btn_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight)
             btn_layout.addWidget(self.btn_open_shift); btn_layout.addWidget(self.btn_close_shift)
@@ -1109,7 +1122,7 @@ def launch(settings: Settings) -> int:
             self.stats_grid = QGridLayout(); self.stats_grid.setSpacing(16); self.stats_grid.setContentsMargins(0, 16, 0, 0)
             
             def make_stat_card(num_color, icon_text):
-                f = QFrame(); f.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;")
+                f = QFrame(); f.setStyleSheet("background: white; border: none; border-radius: 8px; padding: 16px;")
                 l = QVBoxLayout(f); l.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 num = label("0", bold=True); num.setStyleSheet(f"font-size: 28px; color: {num_color}; padding-bottom: 4px;"); num.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 txt = label(icon_text); txt.setStyleSheet("font-size: 12px; color: #64748b; font-weight: bold;"); txt.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1165,6 +1178,7 @@ def launch(settings: Settings) -> int:
                 self.val_parking.setText("0") # Mock logic for parking
                 
                 self.btn_open_shift.hide(); self.btn_close_shift.show(); self.current_shift = s
+                self.shift_id = s.id
             else:
                 self.lbl_shift_desc.setText("Chưa có ca nào đang mở. Mở ca để bắt đầu ghi nhận dữ liệu.")
                 self.progress_bar.setValue(0)
@@ -1182,7 +1196,7 @@ def launch(settings: Settings) -> int:
             
             container = QFrame(dialog)
             container.setObjectName("main_container")
-            container.setStyleSheet("QFrame#main_container { background: #ffffff; border-radius: 12px; border: 1px solid #94a3b8; }")
+            container.setStyleSheet("QFrame#main_container { background: #ffffff; border-radius: 12px; border: none; }")
             root = QVBoxLayout(dialog); root.setContentsMargins(0, 0, 0, 0); root.addWidget(container)
             
             container_layout = QVBoxLayout(container); container_layout.setContentsMargins(0, 0, 0, 0); container_layout.setSpacing(0)
@@ -1220,7 +1234,7 @@ def launch(settings: Settings) -> int:
             ]
             card_buttons = []
             
-            combo_style = "QComboBox { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 13px; background: white; color: #1e293b; min-height: 24px; } QComboBox:focus { border: 1px solid #3b82f6; } QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 28px; border-left: none; } QComboBox::down-arrow { image: url(src/pmql/ui/down_arrow.svg); width: 12px; height: 12px; } QLineEdit { padding: 0px; border: none; background: transparent; }"
+            combo_style = "QComboBox { min-height: 24px; }"
             
             lane_combo = QComboBox(); lane_combo.addItem("-- Tất cả làn --", None); lane_combo.setStyleSheet(combo_style)
             try:
@@ -1234,7 +1248,7 @@ def launch(settings: Settings) -> int:
             cash_combo = QComboBox(); cash_combo.setStyleSheet(combo_style); cash_combo.addItems(["Không có tiền đầu ca", "500,000", "1,000,000", "2,000,000"]); cash_combo.setEditable(True)
             note_combo = QComboBox(); note_combo.setStyleSheet(combo_style); note_combo.addItems(["-- Không có ghi chú --", "Bàn giao chìa khóa", "Hệ thống lỗi nhẹ"]); note_combo.setEditable(True)
             
-            summary_box = QFrame(); summary_box.setStyleSheet("background: #eff6ff; border-radius: 8px; padding: 16px; margin-top: 10px; border: 1px dashed #93c5fd;")
+            summary_box = QFrame(); summary_box.setStyleSheet("background: #eff6ff; border-radius: 8px; padding: 16px; margin-top: 10px; border: none;")
             summary_layout = QVBoxLayout(summary_box); summary_layout.setSpacing(12)
             lbl_summary_title = label("ℹ️ Thông tin ca sẽ mở", bold=True); lbl_summary_title.setStyleSheet("color: #1e3a8a; font-size: 14px;"); summary_layout.addWidget(lbl_summary_title)
             
@@ -1279,12 +1293,12 @@ def launch(settings: Settings) -> int:
             def select_card(idx):
                 for i, btn in enumerate(card_buttons):
                     if i == idx:
-                        btn.setStyleSheet("#card_frame { background: #fff7ed; border: 2px solid #f97316; border-radius: 8px; } QLabel { color: #f97316; border: none; }")
+                        btn.setStyleSheet("#card_frame { background: #fff7ed; border: none; border-radius: 8px; } QLabel { color: #f97316; border: none; }")
                         btn.n.setStyleSheet("font-size: 14px; background: transparent; color: #ea580c; border: none;")
                         btn.t.setStyleSheet("font-size: 11px; background: transparent; color: #ea580c; border: none;")
                         btn.h.setStyleSheet("font-size: 11px; background: transparent; font-weight: bold; color: #ea580c; border: none;")
                     else:
-                        btn.setStyleSheet("#card_frame { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; } QLabel { color: #64748b; border: none; }")
+                        btn.setStyleSheet("#card_frame { background: #ffffff; border: none; border-radius: 8px; } QLabel { color: #64748b; border: none; }")
                         btn.n.setStyleSheet("font-size: 14px; background: transparent; color: #1e293b; border: none;")
                         btn.t.setStyleSheet("font-size: 11px; background: transparent; color: #64748b; border: none;")
                         btn.h.setStyleSheet("font-size: 11px; background: transparent; font-weight: bold; color: #f97316; border: none;")
@@ -1336,7 +1350,7 @@ def launch(settings: Settings) -> int:
             dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
             
             container = QFrame(dialog); container.setObjectName("main_container")
-            container.setStyleSheet("QFrame#main_container { background: #ffffff; border-radius: 12px; border: 1px solid #94a3b8; }")
+            container.setStyleSheet("QFrame#main_container { background: #ffffff; border-radius: 12px; border: none; }")
             root = QVBoxLayout(dialog); root.setContentsMargins(0, 0, 0, 0); root.addWidget(container)
             
             container_layout = QVBoxLayout(container); container_layout.setContentsMargins(0, 0, 0, 0); container_layout.setSpacing(0)
@@ -1360,7 +1374,7 @@ def launch(settings: Settings) -> int:
             
             summary_layout = QHBoxLayout(); summary_layout.setContentsMargins(24, 16, 24, 0); summary_layout.setSpacing(12)
             def make_summary(val, val_color, lbl_text, border_color, bg_color):
-                w = QFrame(); w.setStyleSheet(f"background: {bg_color}; border: 1px solid {border_color}; border-radius: 6px;")
+                w = QFrame(); w.setStyleSheet(f"background: {bg_color}; border: none; border-radius: 6px;")
                 l = QVBoxLayout(w); l.setContentsMargins(12, 16, 12, 16)
                 v = label(str(val), bold=True); v.setStyleSheet(f"color: {val_color}; font-size: 20px; border: none; background: transparent;"); v.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 t = label(lbl_text); t.setStyleSheet("color: #64748b; font-size: 13px; border: none; background: transparent;"); t.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1376,8 +1390,8 @@ def launch(settings: Settings) -> int:
             content.addLayout(summary_layout)
             
             form = QFormLayout(); form.setContentsMargins(24, 8, 24, 0); form.setSpacing(12)
-            combo_style = "QComboBox { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 13px; background: white; color: #1e293b; min-height: 24px; } QComboBox:focus { border: 1px solid #f97316; } QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: top right; width: 28px; border-left: none; } QComboBox::down-arrow { image: url(src/pmql/ui/down_arrow.svg); width: 12px; height: 12px; }"
-            input_style = "QLineEdit { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; font-size: 13px; background: white; color: #1e293b; min-height: 24px; } QLineEdit:focus { border: 1px solid #f97316; }"
+            combo_style = "QComboBox { min-height: 24px; }"
+            input_style = "QLineEdit { min-height: 24px; }"
             
             lbl_cash = label("Tiền mặt thực tế cuối ca"); lbl_cash.setStyleSheet("color: #475569; font-size: 13px; font-weight: bold;")
             closing_cash = QComboBox(); closing_cash.setStyleSheet(combo_style)
@@ -1392,7 +1406,7 @@ def launch(settings: Settings) -> int:
             form.addRow(lbl_cash); form.addRow(closing_cash); form.addRow(custom_cash); form.addRow(lbl_note); form.addRow(close_note)
             content.addLayout(form)
             
-            recon_box = QFrame(); recon_box.setObjectName("recon_box"); recon_box.setStyleSheet("#recon_box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin: 16px 24px 8px 24px; }")
+            recon_box = QFrame(); recon_box.setObjectName("recon_box"); recon_box.setStyleSheet("#recon_box { background: #f8fafc; border: none; border-radius: 6px; margin: 16px 24px 8px 24px; }")
             recon_layout = QVBoxLayout(recon_box); recon_layout.setContentsMargins(16, 16, 16, 16); recon_layout.setSpacing(12)
             
             lbl_recon = label("Đối chiếu thu chi", bold=True); lbl_recon.setStyleSheet("color: #64748b; font-size: 14px; border: none; background: transparent;")
@@ -1605,9 +1619,8 @@ def launch(settings: Settings) -> int:
             for index, rule in enumerate(rules):
                 f = QFrame(); f.setObjectName("fee_card")
                 is_active = rule.is_active
-                border_color = "#facc15" if is_active else "#e2e8f0"
                 f.setStyleSheet(
-                    f"QFrame#fee_card {{ background: white; border: 1px solid {border_color};"
+                    f"QFrame#fee_card {{ background: {'#fffbeb' if is_active else '#ffffff'}; border: none;"
                     f" border-radius: 8px; }}"
                 )
                 c = QVBoxLayout(f); c.setSpacing(12); c.setContentsMargins(16, 14, 16, 14)
@@ -1629,7 +1642,7 @@ def launch(settings: Settings) -> int:
                 c.addLayout(t_row)
                 
                 sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-                sep.setStyleSheet("color: #e2e8f0;"); c.addWidget(sep)
+                sep.setStyleSheet("border: none; border-top: 1px solid #e2e8f0;"); c.addWidget(sep)
 
                 # Stats grid (2 columns)
                 sg = QGridLayout(); sg.setHorizontalSpacing(30); sg.setVerticalSpacing(10)
@@ -1653,7 +1666,7 @@ def launch(settings: Settings) -> int:
                     
                 c.addLayout(sg)
                 
-                sep2_f = QFrame(); sep2_f.setFrameShape(QFrame.Shape.HLine); sep2_f.setStyleSheet("color: #e2e8f0;"); c.addWidget(sep2_f)
+                sep2_f = QFrame(); sep2_f.setFrameShape(QFrame.Shape.HLine); sep2_f.setStyleSheet("border: none; border-top: 1px solid #e2e8f0;"); c.addWidget(sep2_f)
 
                 # Actions row (Edit and Delete)
                 a_row = QHBoxLayout(); a_row.setContentsMargins(0, 0, 0, 0)
@@ -1674,7 +1687,7 @@ def launch(settings: Settings) -> int:
             # Fee Calculator
             calc_frame = QFrame()
             calc_frame.setObjectName("calc_frame")
-            calc_frame.setStyleSheet("QFrame#calc_frame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
+            calc_frame.setStyleSheet("QFrame#calc_frame { background: white; border: none; border-radius: 8px; }")
             calc_layout = QVBoxLayout(calc_frame)
             calc_layout.setContentsMargins(20, 16, 20, 16)
             
@@ -1683,7 +1696,7 @@ def launch(settings: Settings) -> int:
             calc_layout.addWidget(calc_title)
             
             sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.HLine)
-            sep3.setStyleSheet("color: #e2e8f0;"); calc_layout.addWidget(sep3)
+            sep3.setStyleSheet("border: none; border-top: 1px solid #e2e8f0;"); calc_layout.addWidget(sep3)
 
             cg = QGridLayout(); cg.setSpacing(16)
             cg.addWidget(label("Loại xe", "muted"), 0, 0)
@@ -1935,7 +1948,7 @@ def launch(settings: Settings) -> int:
             
             for index, lane in enumerate(lanes):
                 card = QFrame(); card.setObjectName("card")
-                card.setStyleSheet("QFrame#card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
+                card.setStyleSheet("QFrame#card { background: white; border: none; border-radius: 8px; }")
                 cbox = QVBoxLayout(card); cbox.setContentsMargins(20, 20, 20, 20)
                 
                 # Header: Name + Car count
@@ -1969,7 +1982,7 @@ def launch(settings: Settings) -> int:
                 
                 # Devices
                 dev_row = QHBoxLayout()
-                dev_style = "background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px 8px; font-size: 11px;"
+                dev_style = "background: #f0fdf4; color: #16a34a; border: none; border-radius: 6px; padding: 4px 8px; font-size: 11px;"
                 if lane.rfid_device_id: dev_row.addWidget(label("💳 Đầu đọc thẻ", style=dev_style))
                 if lane.camera_source: dev_row.addWidget(label("📷 Camera", style=dev_style))
                 if lane.barrier_device_id: dev_row.addWidget(label("🚧 Barrier", style=dev_style))
@@ -1998,76 +2011,29 @@ def launch(settings: Settings) -> int:
                 self.lane_grid.addWidget(card, index // 2, index % 2)
 
         def show_lane_modal(self, lane=None):
-            dialog = QDialog(self); dialog.setWindowTitle("Thêm làn xe mới" if not lane else "Sửa làn xe"); dialog.setFixedSize(500, 400)
-            from PySide6.QtCore import Qt
-            dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowType.FramelessWindowHint)
-            dialog.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            dialog.setStyleSheet("QDialog { background: transparent; } QLineEdit, QComboBox { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; }")
-            
-            # Wrap everything in a main frame to handle rounded corners
-            main_frame = QFrame(dialog)
-            main_frame.setStyleSheet("QFrame { background: white; border-radius: 12px; }")
-            box = QVBoxLayout(dialog); box.setContentsMargins(0, 0, 0, 0); box.setSpacing(0)
-            box.addWidget(main_frame)
-            
-            inner_box = QVBoxLayout(main_frame); inner_box.setContentsMargins(0, 0, 0, 0); inner_box.setSpacing(0)
-            
-            # Header
-            header = QFrame(); header.setStyleSheet("background: #f97316; border-top-left-radius: 12px; border-top-right-radius: 12px;")
-            hbox = QHBoxLayout(header); hbox.setContentsMargins(20, 15, 20, 15)
-            title = label("+ Thêm làn xe mới" if not lane else "📝 Sửa làn xe", bold=True); title.setStyleSheet("color: white; font-size: 18px;")
-            hbox.addWidget(title); hbox.addStretch()
-            close_btn = QPushButton("✕"); close_btn.setStyleSheet("color: white; font-size: 18px; border: none; background: transparent;")
-            close_btn.clicked.connect(dialog.reject); hbox.addWidget(close_btn)
-            inner_box.addWidget(header)
-            
-            # Body
-            body = QWidget(); vbox = QVBoxLayout(body); vbox.setContentsMargins(20, 20, 20, 20); vbox.setSpacing(15)
-            
-            # Name
-            vbox.addWidget(label("Tên làn *", style="font-weight: bold; font-size: 12px; color: #475569;"))
-            name = QLineEdit(lane.name if lane else ""); name.setPlaceholderText("VD: Làn vào 1, Làn ra A...")
-            vbox.addWidget(name)
-            vbox.addWidget(label("Tên hiển thị trên màn hình vận hành", "muted", style="font-size: 11px; margin-top: -10px;"))
-            
-            # Direction and Status in one row
-            row = QHBoxLayout()
-            col1 = QVBoxLayout(); col1.addWidget(label("Chiều xe", style="font-weight: bold; font-size: 12px; color: #475569;"))
-            direction = QComboBox(); direction.addItems(["Xe vào (IN)", "Xe ra (OUT)", "Hai chiều (BOTH)"])
-            
-            # Map values to combo box indices
-            dir_map = {"IN": 0, "OUT": 1, "BIDIRECTIONAL": 2}
-            rev_dir_map = {0: "IN", 1: "OUT", 2: "BIDIRECTIONAL"}
-            if lane: direction.setCurrentIndex(dir_map.get(lane.direction, 0))
-            col1.addWidget(direction); row.addLayout(col1)
-            
-            col2 = QVBoxLayout(); col2.addWidget(label("Trạng thái", style="font-weight: bold; font-size: 12px; color: #475569;"))
-            status = QComboBox(); status.addItems(["Hoạt động", "Tắt"])
-            if lane and not lane.is_active: status.setCurrentIndex(1)
-            col2.addWidget(status); row.addLayout(col2)
-            
-            vbox.addLayout(row)
-            
-            # Placeholder for devices (simplified for this modal based on screenshot)
-            # The screenshot modal doesn't show the devices inputs, so we use defaults or keep existing if edit
+            title = "Thêm làn xe" if not lane else "Sửa làn xe"
+            dialog, content, footer = modal_shell(self, title, 520)
+            form = QFormLayout(); content.addLayout(form)
+            name = QLineEdit(lane.name if lane else "")
+            name.setPlaceholderText("Ví dụ: Làn vào 1, Làn ra A")
+            direction = QComboBox(); direction.addItem("Xe vào", "IN"); direction.addItem("Xe ra", "OUT"); direction.addItem("Hai chiều", "BIDIRECTIONAL")
+            status = QComboBox(); status.addItem("Hoạt động", True); status.addItem("Tắt", False)
+            if lane:
+                direction.setCurrentIndex(max(0, direction.findData(lane.direction)))
+                status.setCurrentIndex(0 if lane.is_active else 1)
+            form.addRow("Tên làn *", name); form.addRow("Chiều xe", direction); form.addRow("Trạng thái", status)
+            hint = label("Thiết bị có thể được gán ở mục Kết nối thiết bị sau khi lưu làn.", "muted")
+            hint.setWordWrap(True); content.addWidget(hint)
+            cancel, save = QPushButton("Hủy"), QPushButton("Lưu cấu hình")
+            save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
             camera = lane.camera_source if lane else "cam1"
             rfid = lane.rfid_device_id if lane else "rfid1"
             barrier = lane.barrier_device_id if lane else "bar1"
             
-            inner_box.addWidget(body); inner_box.addStretch()
-            
-            # Footer
-            footer = QHBoxLayout(); footer.setContentsMargins(20, 10, 20, 20)
-            footer.addStretch()
-            cancel = QPushButton("Hủy"); cancel.setStyleSheet("background: #94a3b8; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
-            save = QPushButton("💾 Lưu cấu hình"); save.setStyleSheet("background: #f97316; color: white; border-radius: 6px; padding: 8px 16px; font-weight: bold;")
-            cancel.clicked.connect(dialog.reject); footer.addWidget(cancel); footer.addWidget(save)
-            inner_box.addLayout(footer)
-            
             def do_save():
                 try:
-                    is_active = (status.currentIndex() == 0)
-                    selected_dir = rev_dir_map[direction.currentIndex()]
+                    is_active = bool(status.currentData())
+                    selected_dir = direction.currentData()
                     if lane:
                         asyncio.run(_update_lane(settings, lane.id, name.text(), selected_dir, camera, rfid, barrier, is_active))
                     else:
@@ -2142,7 +2108,7 @@ def launch(settings: Settings) -> int:
                 grid.addWidget(label("Trạng thái", "muted"), 12, 0); grid.addWidget(active, 13, 0)
 
             vehicle_group = QGroupBox("Phương tiện đăng ký"); grid.addWidget(vehicle_group, 0, 1, 14, 1)
-            vehicle_group.setStyleSheet("QGroupBox { font-weight: bold; border: 1px solid #d8e1ec; border-radius: 8px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #475569; }")
+            vehicle_group.setStyleSheet("QGroupBox { margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; color: #475569; }")
             v_layout = QVBoxLayout(vehicle_group)
             vehicle_list_layout = QVBoxLayout()
             v_layout.addLayout(vehicle_list_layout)
@@ -2653,7 +2619,7 @@ def launch(settings: Settings) -> int:
                 card.setObjectName(f"devcard_{key}")
                 card.setFixedWidth(150); card.setFixedHeight(120)
                 card.setCursor(Qt.CursorShape.PointingHandCursor)
-                card.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 10px; }")
+                card.setStyleSheet("QFrame { background: white; border: none; border-radius: 10px; }")
                 v = QVBoxLayout(card); v.setContentsMargins(10,10,10,10); v.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
                 ico_lbl = label(icon); ico_lbl.setStyleSheet(f"font-size:28px;border:none;background:{color}15;border-radius:8px;padding:6px 10px;")
@@ -2666,9 +2632,9 @@ def launch(settings: Settings) -> int:
                     selected_type[0] = k; selected_proto[0] = None
                     for ck, cf in device_card_refs.items():
                         if ck == k:
-                            cf.setStyleSheet(f"QFrame {{ background: {c}10; border: 2px solid {c}; border-radius: 10px; }}")
+                            cf.setStyleSheet(f"QFrame {{ background: {c}10; border: none; border-radius: 10px; }}")
                         else:
-                            cf.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 10px; }")
+                            cf.setStyleSheet("QFrame { background: white; border: none; border-radius: 10px; }")
                     # Update protocol section
                     if proto_label_ref[0]: proto_label_ref[0].setText(nm)
                     if proto_btn_row_ref[0]:
@@ -2857,9 +2823,10 @@ def launch(settings: Settings) -> int:
             except Exception as exc: QMessageBox.warning(self, "Không xóa được", str(exc))
 
         def manage_roles(self) -> None:
-            dialog = QDialog(self); dialog.setWindowTitle("Vai trò và quyền"); dialog.setMinimumSize(600, 520); dialog.setStyleSheet(THEME); box = QVBoxLayout(dialog)
+            dialog, box, footer = modal_shell(self, "Vai trò và quyền", 600)
+            dialog.setMinimumHeight(520)
             box.addWidget(label("Tạo hoặc chỉnh sửa vai trò", bold=True)); selector = QComboBox(); selector.addItem("+ Vai trò mới"); name, description = QLineEdit(), QLineEdit(); name.setPlaceholderText("Tên vai trò, ví dụ: CASHIER"); description.setPlaceholderText("Mô tả vai trò")
-            permissions = QListWidget(); permissions.setStyleSheet("background:#ffffff;color:#172033;border:1px solid #d8e1ec;border-radius:8px;")
+            permissions = QListWidget()
             try:
                 catalog = asyncio.run(_permissions(settings)); role_records = asyncio.run(_roles(settings))
                 for record in role_records: selector.addItem(record.name, record)
@@ -2882,13 +2849,13 @@ def launch(settings: Settings) -> int:
                     item = QListWidgetItem(f"{created_code} — {created_desc}"); item.setData(Qt.ItemDataRole.UserRole, created_code); item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable); item.setCheckState(Qt.CheckState.Checked); permissions.addItem(item)
                 except Exception as exc: QMessageBox.warning(dialog, "Không tạo được quyền", str(exc))
             add_permission.clicked.connect(add_permission_item)
-            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save); buttons.rejected.connect(dialog.reject)
+            cancel, save_button = QPushButton("Hủy"), QPushButton("Lưu vai trò"); save_button.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save_button); cancel.clicked.connect(dialog.reject)
             def save() -> None:
                 if not name.text().strip(): QMessageBox.warning(dialog, "Thiếu tên", "Nhập tên vai trò."); return
                 codes = {permissions.item(i).data(Qt.ItemDataRole.UserRole) for i in range(permissions.count()) if permissions.item(i).checkState() == Qt.CheckState.Checked}
                 try: asyncio.run(_save_role(settings, name.text().strip().upper(), description.text().strip(), codes)); dialog.accept()
                 except Exception as exc: QMessageBox.warning(dialog, "Không lưu được", str(exc))
-            buttons.accepted.connect(save); box.addWidget(buttons); dialog.exec()
+            save_button.clicked.connect(save); dialog.exec()
 
         def open_shift(self) -> None:
             dialog, content, footer = modal_shell(self, "Mở ca làm việc", 740)
@@ -2899,10 +2866,10 @@ def launch(settings: Settings) -> int:
             preset_buttons = []
             for name, time, dur, icon in presets:
                 btn = QPushButton(); btn.setCheckable(True)
-                btn.setStyleSheet("QPushButton { background: #ffffff; border: 1px solid #d8e1ec; border-radius: 10px; padding: 10px; } QPushButton:checked { border: 2px solid #ff7a1a; background: #fff0e4; }")
+                btn.setStyleSheet("QPushButton { background: #ffffff; border: none; border-radius: 10px; padding: 10px; } QPushButton:checked { background: #fff7ed; color: #ea580c; }")
                 vbox = QVBoxLayout(btn); icon_lbl = label(icon); icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); icon_lbl.setStyleSheet("font-size: 24px;")
                 name_lbl = label(name, bold=True); name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); time_lbl = label(time, "muted"); time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                dur_lbl = label(dur); dur_lbl.setStyleSheet("color:#ff7a1a; font-size:11px;"); dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                dur_lbl = label(dur); dur_lbl.setStyleSheet("color:#f97316; font-size:11px;"); dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 vbox.addWidget(icon_lbl); vbox.addWidget(name_lbl); vbox.addWidget(time_lbl); vbox.addWidget(dur_lbl)
                 def on_click(checked, p=(name, time, dur, icon), button=btn):
                     if checked:
@@ -2913,15 +2880,17 @@ def launch(settings: Settings) -> int:
             preset_buttons[0].setChecked(True); content.addLayout(preset_layout); content.addSpacing(15)
             grid = QGridLayout()
             grid.addWidget(label("Làn phụ trách", "muted"), 0, 0); lane_cb = QComboBox(); lane_cb.addItem("-- Tất cả làn --")
+            lanes = []
             try:
-                for ln in asyncio.run(_lanes(settings)): lane_cb.addItem(ln.name)
+                lanes = asyncio.run(_lanes(settings))
+                for ln in lanes: lane_cb.addItem(ln.name)
             except Exception: pass
             grid.addWidget(lane_cb, 1, 0); grid.addWidget(label("Loại ca", "muted"), 0, 1); type_cb = QComboBox()
             for name, time, _, _ in presets: type_cb.addItem(f"{name} ({time})")
             grid.addWidget(type_cb, 1, 1); grid.addWidget(label("Tiền đầu ca (VNĐ)", "muted"), 2, 0); cash_cb = QComboBox(); cash_cb.addItems(["Không có tiền đầu ca", "500.000 đ", "1.000.000 đ", "2.000.000 đ", "5.000.000 đ", "Số tiền khác..."])
             grid.addWidget(cash_cb, 3, 0); grid.addWidget(label("Ghi chú bổ sung", "muted"), 2, 1); note_cb = QComboBox(); note_cb.addItems(["-- Không có ghi chú --", "Bàn giao với ca trước", "Bàn giao cho ca sau", "Thiết bị cần kiểm tra", "Có sự cố cần báo cáo", "Ngày lễ - lưu lượng cao", "Ca cuối tuần"])
             grid.addWidget(note_cb, 3, 1); content.addLayout(grid); content.addSpacing(15)
-            summary_frame = QFrame(); summary_frame.setStyleSheet("background: #f4f8fb; border-radius: 8px; border: 1px dashed #c0d1e1;")
+            summary_frame = QFrame(); summary_frame.setStyleSheet("background: #f8fafc; border-radius: 8px; border: none;")
             sum_vbox = QVBoxLayout(summary_frame); title_lbl = label("ℹ Thông tin ca sẽ mở", bold=True); title_lbl.setStyleSheet("color: #2b6cb0; margin-bottom: 5px;")
             sum_vbox.addWidget(title_lbl); sum_type = label("Loại ca: Ca sáng"); sum_lane = label("Làn: -- Tất cả làn --"); sum_note = label("Ghi chú: Ca sáng (06:00-14:00)")
             sum_vbox.addWidget(sum_type); sum_vbox.addWidget(sum_lane); sum_vbox.addWidget(sum_note); content.addWidget(summary_frame)
@@ -2960,7 +2929,7 @@ def launch(settings: Settings) -> int:
                 except Exception as exc: QMessageBox.warning(dialog, "Không thể mở ca", str(exc)); return
                 self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;")
                 self.shift_button.setText("✓ Ca đang hoạt động")
-                self.refresh_live(); dialog.accept()
+                self.refresh_live(); self.reload_page("shifts"); dialog.accept()
             save.clicked.connect(do_open); dialog.exec()
 
         def record_entry(self, lane_id: str) -> None:
