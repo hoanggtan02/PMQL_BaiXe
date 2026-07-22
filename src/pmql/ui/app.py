@@ -80,18 +80,15 @@ def launch(settings: Settings) -> int:
     _BTN_PLAIN_STYLE = "QPushButton { background: #64748b; color: white; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; } QPushButton:hover { background: #475569; }"
 
     def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int = 16, icon_color: str = "white") -> QPushButton:
-        """Create a styled icon button using qtawesome icons."""
         btn = QPushButton()
-        if _HAS_QTA:
-            try:
-                ico = qta.icon(icon_name, color=icon_color)
-                btn.setIcon(ico)
-                btn.setIconSize(QSize(size, size))
-                btn.setText(f" {text}")
-            except Exception:
-                btn.setText(text)
-        else:
-            btn.setText(text)
+        symbol_map = {
+            "fa5s.edit": "✎",
+            "fa5s.trash-alt": "🗑",
+            "fa5s.user-edit": "👤",
+            "fa5s.plus": "➕"
+        }
+        sym = symbol_map.get(icon_name, "")
+        btn.setText(f"{sym} {text}" if sym else text)
         btn.setStyleSheet(style)
         btn.setFixedHeight(30)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -835,7 +832,7 @@ def launch(settings: Settings) -> int:
                 dialog.accept()
             save.clicked.connect(do_close); dialog.exec()
 
-        def make_table(self, headers: list[str], minimum_rows: int = 10, action_col_width: int = 200) -> QTableWidget:
+        def make_table(self, headers: list[str], minimum_rows: int = 10, action_col_width: int = 300) -> QTableWidget:
             from PySide6.QtCore import Qt as _Qt
             table = QTableWidget(0, len(headers))
             table.setHorizontalHeaderLabels(headers)
@@ -1746,7 +1743,7 @@ def launch(settings: Settings) -> int:
                         hours, mins = divmod(minutes, 60)
                         
                         result_lbl.setStyleSheet("color: #16a34a; font-size: 14px; font-weight: bold;")
-                        result_lbl.setText(f"Tổng phí: {fee:,} đ (Áp dụng: {rule_c.name} - Thời gian gửi: {hours} giờ {mins} phút)")
+                        result_lbl.setText(f"Tổng phí: {int(getattr(fee, 'amount', fee)):,} đ (Áp dụng: {rule_c.name} - Thời gian gửi: {hours} giờ {mins} phút)")
                     result_lbl.setVisible(True)
                 except Exception as exc:
                     result_lbl.setStyleSheet("color: #ef4444; font-size: 13px;")
@@ -1801,7 +1798,7 @@ def launch(settings: Settings) -> int:
 
         def card_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thẻ RFID", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thẻ"); add.setObjectName("primary"); add.clicked.connect(self.add_card); row.addWidget(add); box.addLayout(row)
-            self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"], action_col_width=210); box.addWidget(self.card_table, 1); self.load_cards(); return page
+            self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"], action_col_width=250); box.addWidget(self.card_table, 1); self.load_cards(); return page
 
         def load_cards(self) -> None:
             if not hasattr(self, "card_table"): return
@@ -1838,11 +1835,32 @@ def launch(settings: Settings) -> int:
 
                 # Action buttons — same icon style as the Subscribers page
                 actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(6, 4, 6, 4); actions_row.setSpacing(6)
+                
+                status_btn = icon_btn("fa5s.sync", "Đổi TT", _BTN_PLAIN_STYLE)
+                
+                def _show_status_menu(item_card=card, btn=status_btn):
+                    from PySide6.QtWidgets import QMenu
+                    from PySide6.QtCore import QPoint
+                    menu = QMenu(self.card_table)
+                    menu.setStyleSheet("QMenu { background: white; border: 1px solid #cbd5e1; border-radius: 6px; } QMenu::item { padding: 6px 24px; } QMenu::item:selected { background: #f1f5f9; }")
+                    for text, val in [("Có sẵn", "AVAILABLE"), ("Đang dùng", "IN_USE"), ("Đã mất", "LOST"), ("Bị khóa", "LOCKED")]:
+                        action = menu.addAction(text)
+                        action.triggered.connect(lambda _, v=val, c=item_card: _change_card_status(v, c))
+                    menu.exec(btn.mapToGlobal(QPoint(0, btn.height())))
+                    
+                def _change_card_status(val, item_card):
+                    try:
+                        asyncio.run(_update_card(settings, item_card.id, item_card.card_type, item_card.subscriber_id, val))
+                        self.reload_page("cards")
+                    except Exception as e:
+                        QMessageBox.warning(self, "Lỗi", str(e))
+                status_btn.clicked.connect(lambda _=False: _show_status_menu())
+                
                 edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE)
                 remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
                 edit.clicked.connect(lambda _=False, item=card: self.edit_card(item))
                 remove.clicked.connect(lambda _=False, item=card: self.delete_card(item))
-                actions_row.addWidget(edit); actions_row.addWidget(remove)
+                actions_row.addWidget(status_btn); actions_row.addWidget(edit); actions_row.addWidget(remove)
                 self.card_table.setCellWidget(r, 4, actions)
 
         def add_card(self) -> None:
@@ -2925,7 +2943,7 @@ def launch(settings: Settings) -> int:
                 note_txt = note_cb.currentText() if "Không có" not in note_cb.currentText() else ""
                 
                 try:
-                    self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id"), lane_id, self.selected_preset[0], start_cash, note_txt))
+                    self.shift_id = asyncio.run(_open_shift(settings, getattr(self.user, "user_id"), lane_id=lane_id, opening_cash=start_cash, note=note_txt))
                 except Exception as exc: QMessageBox.warning(dialog, "Không thể mở ca", str(exc)); return
                 self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;")
                 self.shift_button.setText("✓ Ca đang hoạt động")

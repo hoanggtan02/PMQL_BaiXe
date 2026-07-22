@@ -46,9 +46,13 @@ class RfidTcpServer:
                 pass
 
     async def start(self):
-        self.server = await asyncio.start_server(self.handle_client, '0.0.0.0', self.port)
-        addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
-        logger.info(f"RFID TCP Server listening on {addrs}")
+        try:
+            self.server = await asyncio.start_server(self.handle_client, '0.0.0.0', self.port)
+            addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
+            logger.info(f"RFID TCP Server listening on {addrs}")
+        except OSError as e:
+            logger.error(f"Cannot start RFID TCP Server: {e}")
+            self.server = None
 
     async def stop(self):
         if self.server:
