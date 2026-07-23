@@ -1,5 +1,9 @@
 """Reusable visual components for the PMQL PySide6 desktop application."""
 from __future__ import annotations
+from PySide6.QtWidgets import *
+from PySide6.QtCore import *
+from PySide6.QtGui import *
+
 
 
 LIGHT_THEME = """
@@ -126,3 +130,134 @@ def modal_shell(parent, title: str, minimum_width: int = 620):
     # Footer actions are attached by the caller after this helper returns.
     QTimer.singleShot(0, lambda: [button.setCursor(Qt.CursorShape.PointingHandCursor) for button in dialog.findChildren(QPushButton)])
     return dialog, content_layout, footer_layout
+
+def show_toast(parent, message: str, toast_type: str = "success"):
+    from PySide6.QtCore import Qt, QTimer, QPropertyAnimation
+    from PySide6.QtWidgets import QWidget, QHBoxLayout, QFrame, QLabel, QPushButton, QGraphicsDropShadowEffect, QGraphicsOpacityEffect, QApplication
+    from PySide6.QtGui import QColor
+
+    class ToastNotification(QWidget):
+        def __init__(self, prnt, msg, t_type):
+            super().__init__(prnt)
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            
+            self.layout = QHBoxLayout(self)
+            self.layout.setContentsMargins(10, 10, 10, 10)
+            
+            self.container = QFrame()
+            self.container.setObjectName("toastContainer")
+            self.container.setStyleSheet("""
+                QFrame#toastContainer {
+                    background-color: white;
+                    border-radius: 8px;
+                    border: 1px solid #e2e8f0;
+                }
+            """)
+            
+            shadow = QGraphicsDropShadowEffect(self)
+            shadow.setBlurRadius(15)
+            shadow.setColor(QColor(0, 0, 0, 30))
+            shadow.setOffset(0, 4)
+            self.container.setGraphicsEffect(shadow)
+
+            self.container.setMinimumWidth(280)
+
+            c_layout = QHBoxLayout(self.container)
+            c_layout.setContentsMargins(20, 16, 20, 16)
+            c_layout.setSpacing(16)
+            
+            icon_lbl = QLabel()
+            if t_type == "success":
+                icon_lbl.setText("✓")
+                icon_lbl.setStyleSheet("color: white; background-color: #22c55e; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 6px;")
+            else:
+                icon_lbl.setText("!")
+                icon_lbl.setStyleSheet("color: white; background-color: #ef4444; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 8px;")
+                
+            msg_lbl = QLabel(msg)
+            msg_lbl.setStyleSheet("color: #334155; font-size: 15px; font-weight: 500;")
+            
+            close_btn = QPushButton("✕")
+            close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            close_btn.setStyleSheet("color: #94a3b8; background: transparent; border: none; font-size: 18px; font-weight: bold; padding: 0 4px;")
+            close_btn.clicked.connect(self.close_toast)
+            
+            c_layout.addWidget(icon_lbl)
+            c_layout.addWidget(msg_lbl)
+            c_layout.addWidget(close_btn)
+            
+            self.layout.addWidget(self.container)
+            
+            self.timer = QTimer(self)
+            self.timer.timeout.connect(self.fade_out)
+            self.timer.start(3000)
+            
+            self.setWindowOpacity(1.0)
+
+        def fade_out(self):
+            self.animation = QPropertyAnimation(self, b"windowOpacity")
+            self.animation.setDuration(300)
+            self.animation.setStartValue(1.0)
+            self.animation.setEndValue(0.0)
+            self.animation.finished.connect(self.close)
+            self.animation.start()
+            
+        def close_toast(self):
+            self.close()
+
+    main_window = None
+    for widget in QApplication.topLevelWidgets():
+        if widget.objectName() == "MainWindow":
+            main_window = widget
+            break
+    if not main_window: main_window = parent
+
+    toast = ToastNotification(main_window, message, toast_type)
+    toast.adjustSize()
+    
+    geom = main_window.geometry()
+    # Position relative to screen since it's a Tool window
+    x = geom.x() + geom.width() - toast.width() - 20
+    y = geom.y() + 50
+    toast.move(x, y)
+    toast.show()
+
+_BTN_ICON_STYLE = (
+    "QPushButton { border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 600; }"
+)
+_BTN_EDIT_STYLE = "QPushButton { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; min-width: 58px; } QPushButton:hover { background: #2563eb; }"
+_BTN_DEL_STYLE  = "QPushButton { background: #ef4444; color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; min-width: 58px; } QPushButton:hover { background: #dc2626; }"
+_BTN_PLAIN_STYLE = "QPushButton { background: #64748b; color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; min-width: 58px; } QPushButton:hover { background: #475569; }"
+
+def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int = 16, icon_color: str = "white") -> QPushButton:
+    btn = QPushButton()
+    symbol_map = {
+        "fa5s.edit": "✏",
+        "fa5s.user-edit": "✏",
+        "fa5s.trash-alt": "✕",
+        "fa5s.plus": "+",
+        "fa5s.history": "⏱",
+        "fa5s.sync": "↻",
+        "fa5s.sync-alt": "↻"
+    }
+    sym = symbol_map.get(icon_name, "")
+    btn.setText(f"{sym} {text}" if sym else text)
+    btn.setStyleSheet(style)
+    btn.setFixedHeight(30)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    return btn
+
+
+def label(text: str, name: str = "", bold: bool = False, style: str = "") -> QLabel:
+    item = QLabel(text)
+    if name: item.setObjectName(name)
+    combined = style
+    if bold:
+        combined = "font-weight: bold; " + combined
+    if combined:
+        item.setStyleSheet(combined)
+    return item
+
+
+__all__ = ['LIGHT_THEME', 'modal_shell', 'show_toast', '_BTN_ICON_STYLE', '_BTN_EDIT_STYLE', '_BTN_DEL_STYLE', '_BTN_PLAIN_STYLE', 'icon_btn', 'label']

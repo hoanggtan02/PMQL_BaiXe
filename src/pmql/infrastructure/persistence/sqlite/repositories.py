@@ -74,9 +74,11 @@ def _card_to_entity(row: CardModel) -> Card:
         id=row.id,
         branch_id=row.branch_id,
         rfid_code=row.rfid_code,
+        card_type=row.card_type,
         subscriber_id=row.subscriber_id,
         vehicle_id=row.vehicle_id,
         is_active=row.is_active,
+        status=row.status,
         issued_at=row.issued_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -362,6 +364,8 @@ class SQLiteCardRepository:
         row = await self._session.get(CardModel, card.id)
         if row is None:
             raise ValueError(f"Card {card.id} not found")
+        row.card_type = card.card_type
+        row.status = card.status
         row.subscriber_id = card.subscriber_id
         row.vehicle_id = card.vehicle_id
         row.is_active = card.is_active
