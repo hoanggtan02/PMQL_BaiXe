@@ -63,6 +63,13 @@ def launch(settings: Settings) -> int:
     except ImportError:
         _HAS_QTA = False
 
+    # Initialize missing database tables automatically on startup
+    async def _init_db():
+        db = Database(settings.local_database_url)
+        await db.create_all()
+        await db.dispose()
+    asyncio.run(_init_db())
+
     # Start background TCP Server for RFID
     def on_rfid_read(ip, rfid_code):
         global_hw_signals.rfid_scanned.emit(ip, rfid_code)
@@ -2879,16 +2886,26 @@ def launch(settings: Settings) -> int:
             dialog, content, footer = modal_shell(self, "Mở ca làm việc", 740)
             content.addWidget(label("Chọn ca làm việc", "muted"))
             preset_layout = QHBoxLayout()
-            presets = [("Ca sáng", "06:00 - 14:00", "8 tiếng", "🌅"), ("Ca chiều", "14:00 - 22:00", "8 tiếng", "🌞"), ("Ca đêm", "22:00 - 06:00", "8 tiếng", "🌙"), ("Ca ngày đủ", "07:00 - 19:00", "12 tiếng", "📋")]
+            from PySide6.QtSvgWidgets import QSvgWidget
+            svg_m = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>'
+            svg_a = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="9" x2="12" y2="2"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="10.22" x2="19.78" y2="11.64"></line><line x1="23" y1="22" x2="1" y2="22"></line><polyline points="16 6 12 2 8 6"></polyline></svg>'
+            svg_n = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>'
+            svg_f = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>'
+            presets = [("Ca sáng", "06:00 - 14:00", "8 tiếng", svg_m), ("Ca chiều", "14:00 - 22:00", "8 tiếng", svg_a), ("Ca đêm", "22:00 - 06:00", "8 tiếng", svg_n), ("Ca ngày đủ", "07:00 - 19:00", "12 tiếng", svg_f)]
             self.selected_preset = presets[0]
             preset_buttons = []
             for name, time, dur, icon in presets:
                 btn = QPushButton(); btn.setCheckable(True)
-                btn.setStyleSheet("QPushButton { background: #ffffff; border: none; border-radius: 10px; padding: 10px; } QPushButton:checked { background: #fff7ed; color: #ea580c; }")
-                vbox = QVBoxLayout(btn); icon_lbl = label(icon); icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); icon_lbl.setStyleSheet("font-size: 24px;")
+                btn.setMinimumHeight(130)
+                btn.setStyleSheet("QPushButton { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; } QPushButton:checked { background: #fff7ed; border-color: #ea580c; }")
+                vbox = QVBoxLayout(btn)
+                icon_lbl = QSvgWidget()
+                icon_lbl.load(icon.encode('utf-8'))
+                icon_lbl.setFixedSize(32, 32)
+                icon_cont = QWidget(); icon_lay = QHBoxLayout(icon_cont); icon_lay.setContentsMargins(0,0,0,0); icon_lay.setAlignment(Qt.AlignmentFlag.AlignCenter); icon_lay.addWidget(icon_lbl)
                 name_lbl = label(name, bold=True); name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter); time_lbl = label(time, "muted"); time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 dur_lbl = label(dur); dur_lbl.setStyleSheet("color:#f97316; font-size:11px;"); dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                vbox.addWidget(icon_lbl); vbox.addWidget(name_lbl); vbox.addWidget(time_lbl); vbox.addWidget(dur_lbl)
+                vbox.addWidget(icon_cont); vbox.addWidget(name_lbl); vbox.addWidget(time_lbl); vbox.addWidget(dur_lbl)
                 def on_click(checked, p=(name, time, dur, icon), button=btn):
                     if checked:
                         for b in preset_buttons:
