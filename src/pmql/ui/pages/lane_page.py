@@ -142,11 +142,14 @@ class LanePageMixin:
                     selected_dir = direction.currentData()
                     if lane:
                         asyncio.run(_update_lane(self.settings, lane.id, name.text(), selected_dir, camera, rfid, barrier, is_active))
+                        msg = "Cập nhật làn xe thành công!"
                     else:
                         asyncio.run(_create_lane(self.settings, name.text(), selected_dir, camera, rfid, barrier))
+                        msg = "Thêm làn xe thành công!"
                     self.load_lanes()
                     if hasattr(self, 'reload_page'): self.reload_page('operations')
                     dialog.accept()
+                    show_toast(self, msg, "success")
                 except Exception as exc: show_toast(dialog, str(exc), "error")
             save.clicked.connect(do_save); dialog.exec()
 
@@ -163,5 +166,6 @@ class LanePageMixin:
                 asyncio.run(_delete_lane(self.settings, lane.id))
                 self.load_lanes()
                 if hasattr(self, 'reload_page'): self.reload_page('operations')
+                show_toast(self, "Xóa làn xe thành công!", "success")
             except Exception as exc: show_toast(self, str(exc), "error")
 

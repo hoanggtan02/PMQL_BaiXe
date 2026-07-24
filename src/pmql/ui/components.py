@@ -213,11 +213,38 @@ def show_toast(parent, message: str, toast_type: str = "success"):
             break
     if not main_window: main_window = parent
 
+    if not hasattr(main_window, '_active_toasts'):
+        main_window._active_toasts = []
+
     toast = ToastNotification(main_window, message, toast_type)
+    main_window._active_toasts.append(toast)
+    
+    # Clean up reference when closing
+    original_close = toast.close
+    def _close_and_remove():
+        if toast in main_window._active_toasts:
+            main_window._active_toasts.remove(toast)
+        original_close()
+    toast.close = _close_and_remove
+
     toast.adjustSize()
     
     geom = main_window.geometry()
-    # Position relative to screen since it's a Tool window
+    
+    # Push existing toasts down
+    from PySide6.QtCore import QPoint, QPropertyAnimation
+    for existing_toast in main_window._active_toasts[:-1]:
+        anim = QPropertyAnimation(existing_toast, b"pos", existing_toast)
+        anim.setDuration(300)
+        anim.setStartValue(existing_toast.pos())
+        anim.setEndValue(existing_toast.pos() + QPoint(0, 60))
+        anim.start()
+        # Keep animation reference alive
+        if not hasattr(existing_toast, 'anims'):
+            existing_toast.anims = []
+        existing_toast.anims.append(anim)
+
+    # Position the new toast at the top
     x = geom.x() + geom.width() - toast.width() - 20
     y = geom.y() + 50
     toast.move(x, y)
@@ -239,7 +266,8 @@ def icon_btn(icon_name: str, text: str, style: str = _BTN_EDIT_STYLE, size: int 
         "fa5s.plus": "+",
         "fa5s.history": "⏱",
         "fa5s.sync": "↻",
-        "fa5s.sync-alt": "↻"
+        "fa5s.sync-alt": "↻",
+        "fa5s.sign-out-alt": "↪"
     }
     sym = symbol_map.get(icon_name, "")
     btn.setText(f"{sym} {text}" if sym else text)

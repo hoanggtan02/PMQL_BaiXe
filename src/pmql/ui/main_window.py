@@ -101,20 +101,46 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             footer_div = QFrame(); footer_div.setFrameShape(QFrame.Shape.HLine)
             footer_div.setStyleSheet("border: none; border-top: 1px solid #1e293b;")
             box.addWidget(footer_div)
+            
             footer_area = QWidget(); footer_area.setStyleSheet("background: transparent;")
-            footer_lay = QVBoxLayout(footer_area); footer_lay.setContentsMargins(20, 12, 20, 16); footer_lay.setSpacing(2)
-            user_section = label("ĐANG ĐĂNG NHẬP")
-            user_section.setStyleSheet("color: #334155; font-size: 9px; font-weight: 700; letter-spacing: 1.5px;")
-            footer_lay.addWidget(user_section)
-            uname = label(getattr(self.user, "full_name"), bold=True)
-            uname.setStyleSheet("color: #f1f5f9; font-size: 13px; font-weight: 700;")
-            footer_lay.addWidget(uname)
-            role_txt = getattr(self.user, "role", "")
-            role_colors = {"admin": ("#fff7ed", "#c2410c", "#fed7aa"), "operator": ("#f0fdf4", "#15803d", "#bbf7d0")}
-            rbg, rcolor, rborder = role_colors.get(role_txt, ("#f1f5f9", "#475569", "#e2e8f0"))
-            role_badge = label(role_txt)
-            role_badge.setStyleSheet(f"background: {rbg}; color: {rcolor}; border: 1px solid {rborder}; border-radius: 8px; padding: 2px 8px; font-size: 10px; font-weight: 700;")
-            footer_lay.addWidget(role_badge)
+            footer_lay = QHBoxLayout(footer_area); footer_lay.setContentsMargins(16, 12, 16, 16); footer_lay.setSpacing(12)
+            
+            # Avatar
+            avatar = QLabel("".join([w[0].upper() for w in getattr(self.user, "full_name", "").split()][:2]))
+            avatar.setFixedSize(36, 36)
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            avatar.setStyleSheet("background: #f97316; color: white; font-weight: bold; font-size: 14px; border-radius: 18px;")
+            footer_lay.addWidget(avatar)
+            
+            # Text info
+            text_lay = QVBoxLayout(); text_lay.setSpacing(2); text_lay.setContentsMargins(0, 0, 0, 0)
+            uname = label(getattr(self.user, "full_name", ""), bold=True)
+            uname.setStyleSheet("color: white; font-size: 13px; font-weight: 700;")
+            text_lay.addWidget(uname)
+            
+            role_dict = {"admin": "Quản trị viên", "operator": "Nhân viên vận hành"}
+            role_txt = role_dict.get(getattr(self.user, "role", ""), getattr(self.user, "role", ""))
+            r_lbl = label(role_txt)
+            r_lbl.setStyleSheet("color: #94a3b8; font-size: 11px;")
+            text_lay.addWidget(r_lbl)
+            
+            footer_lay.addLayout(text_lay, 1)
+            
+            # Logout btn
+            logout_btn = icon_btn("fa5s.sign-out-alt", "")
+            logout_btn.setFixedSize(32, 32)
+            logout_btn.setStyleSheet("QPushButton { background: transparent; border: 1px solid #334155; color: #cbd5e1; border-radius: 6px; font-size: 14px; padding: 0; } QPushButton:hover { background: #1e293b; color: white; border: 1px solid #475569; }")
+            logout_btn.setToolTip("Đăng xuất")
+            
+            def do_logout():
+                from pmql.ui.login import Login
+                self._login_window = Login(self.settings, type(self))
+                self._login_window.show()
+                self.close()
+                
+            logout_btn.clicked.connect(do_logout)
+            footer_lay.addWidget(logout_btn)
+            
             box.addWidget(footer_area)
             return side
 

@@ -12,7 +12,7 @@ class Vehicle_typePageMixin:
             row = QHBoxLayout(); title = label("Cấu hình loại xe", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch()
             add = QPushButton("+ Thêm loại xe"); add.setObjectName("primary"); add.clicked.connect(self.add_vehicle_type); row.addWidget(add); box.addLayout(row)
             box.addWidget(label("Các biểu mẫu thuê bao, biểu phí và xe vào đều dùng danh mục này.", "muted"))
-            self.vehicle_type_table = self.make_table(["Mã dùng trong hệ thống", "Tên hiển thị", "Thao tác"], 6); box.addWidget(self.vehicle_type_table, 1); self.load_vehicle_types()
+            self.vehicle_type_table = self.make_table(["Mã dùng trong hệ thống", "Tên hiển thị", "Thao tác"]); box.addWidget(self.vehicle_type_table, 1); self.load_vehicle_types()
             return page
 
     def load_vehicle_types(self) -> None:
@@ -21,12 +21,22 @@ class Vehicle_typePageMixin:
             except Exception as exc: show_toast(self, str(exc), "error"); return
             self.vehicle_type_table.setRowCount(len(rows))
             for r, item in enumerate(rows):
-                self.vehicle_type_table.setItem(r, 0, QTableWidgetItem(item.code))
-                self.vehicle_type_table.setItem(r, 1, QTableWidgetItem(item.display_name))
-                actions = QWidget(); actions.setMinimumHeight(38); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
+                code_item = QTableWidgetItem(item.code)
+                code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.vehicle_type_table.setItem(r, 0, code_item)
+                
+                name_item = QTableWidgetItem(item.display_name)
+                name_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.vehicle_type_table.setItem(r, 1, name_item)
+                actions = QWidget(); actions.setMinimumHeight(38); action_row = QHBoxLayout(actions); action_row.setContentsMargins(6, 4, 6, 4)
+                action_row.setSpacing(6)
+                action_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE); remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
                 edit.clicked.connect(lambda _=False, row=item: self.edit_vehicle_type(row)); remove.clicked.connect(lambda _=False, row=item: self.delete_vehicle_type(row))
-                action_row.addWidget(edit); action_row.addWidget(remove); self.vehicle_type_table.setCellWidget(r, 2, actions)
+                action_row.addWidget(edit); action_row.addWidget(remove)
+                self.vehicle_type_table.setItem(r, 2, QTableWidgetItem(""))
+                self.vehicle_type_table.setCellWidget(r, 2, actions)
+                self.vehicle_type_table.setRowHeight(r, 56)
 
     def vehicle_type_dialog(self, item=None) -> None:
             dialog, content, footer = modal_shell(self, "Sửa loại xe" if item else "Thêm loại xe", 520)
@@ -38,9 +48,15 @@ class Vehicle_typePageMixin:
             cancel, save = QPushButton("Hủy"), QPushButton("Lưu loại xe"); save.setObjectName("primary"); footer.addStretch(); footer.addWidget(cancel); footer.addWidget(save); cancel.clicked.connect(dialog.reject)
             def save_item() -> None:
                 try:
-                    if item: asyncio.run(_update_vehicle_type(self.settings, item.id, code.text(), name.text()))
-                    else: asyncio.run(_create_vehicle_type(self.settings, code.text(), name.text()))
-                    dialog.accept(); self.reload_page("vehicle_types")
+                    if item:
+                        asyncio.run(_update_vehicle_type(self.settings, item.id, code.text(), name.text()))
+                        msg = "Cập nhật loại xe thành công!"
+                    else:
+                        asyncio.run(_create_vehicle_type(self.settings, code.text(), name.text()))
+                        msg = "Thêm loại xe thành công!"
+                    dialog.accept()
+                    show_toast(self, msg, "success")
+                    self.reload_page("vehicle_types")
                 except Exception as exc: show_toast(dialog, str(exc), "error")
             save.clicked.connect(save_item); dialog.exec()
 
@@ -52,6 +68,9 @@ class Vehicle_typePageMixin:
 
     def delete_vehicle_type(self, item) -> None:
             if QMessageBox.question(self, "Xóa loại xe", f"Xóa mềm loại xe '{item.display_name}'?") != QMessageBox.StandardButton.Yes: return
-            try: asyncio.run(_delete_vehicle_type(self.settings, item.id)); self.reload_page("vehicle_types")
+            try: 
+                asyncio.run(_delete_vehicle_type(self.settings, item.id))
+                show_toast(self, "Xóa loại xe thành công!", "success")
+                self.reload_page("vehicle_types")
             except Exception as exc: show_toast(self, str(exc), "error")
 
