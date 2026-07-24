@@ -235,6 +235,10 @@ class SQLiteLaneRepository:
         result = await self._session.execute(select(LaneModel).where(LaneModel.is_active.is_(True), LaneModel.is_deleted.is_(False)))
         return [_lane_to_entity(r) for r in result.scalars().all()]
 
+    async def list_all(self) -> list[Lane]:
+        result = await self._session.execute(select(LaneModel).where(LaneModel.is_deleted.is_(False)).order_by(LaneModel.created_at))
+        return [_lane_to_entity(r) for r in result.scalars().all()]
+
     async def create(self, lane: Lane) -> None:
         self._session.add(
             LaneModel(

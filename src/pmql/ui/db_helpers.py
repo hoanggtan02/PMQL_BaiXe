@@ -276,7 +276,7 @@ async def _delete_card(settings: Settings, card_id: str) -> None:
 async def _lanes(settings: Settings):
     db = Database(settings.local_database_url)
     try:
-        async with db.session() as session: return await SQLiteLaneRepository(session).list_active()
+        async with db.session() as session: return await SQLiteLaneRepository(session).list_all()
     finally: await db.dispose()
 
 async def _create_lane(settings: Settings, name: str, direction: str, camera: str | None, rfid: str | None, barrier: str | None) -> None:
