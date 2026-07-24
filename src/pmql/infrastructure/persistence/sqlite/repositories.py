@@ -191,6 +191,8 @@ def _alert_to_entity(row: AlertModel) -> Alert:
         alert_type=row.alert_type,
         severity=row.severity,
         message=row.message,
+        payload=row.payload,
+        handle_note=row.handle_note,
         related_entity_id=row.related_entity_id,
         is_acknowledged=row.is_acknowledged,
         acknowledged_by=row.acknowledged_by,
@@ -755,6 +757,8 @@ class SQLiteAlertRepository:
                 alert_type=alert.alert_type,
                 severity=alert.severity,
                 message=alert.message,
+                payload=alert.payload,
+                handle_note=alert.handle_note,
                 related_entity_id=alert.related_entity_id,
                 is_acknowledged=alert.is_acknowledged,
                 acknowledged_by=alert.acknowledged_by,
@@ -777,6 +781,7 @@ class SQLiteAlertRepository:
         row.is_acknowledged = alert.is_acknowledged
         row.acknowledged_by = alert.acknowledged_by
         row.acknowledged_at = alert.acknowledged_at
+        row.handle_note = alert.handle_note
         row.updated_at = alert.updated_at
         row.sync_version = alert.sync_version
         await self._session.flush()
@@ -791,6 +796,39 @@ class SQLiteAlertRepository:
         result = await self._session.execute(
             select(AlertModel).order_by(AlertModel.created_at.desc()).limit(limit)
         )
+        return [_alert_to_entity(r) for r in result.scalars().all()]
+
+    async def get_stats(self) -> dict:
+        from datetime import datetime, time
+        today_start = datetime.combine(datetime.utcnow().date(), time.min)
+        
+        result_all = await self._session.execute(select(AlertModel))
+        alerts = result_all.scalars().all()
+        
+        total_today = sum(1 for a in alerts if a.created_at >= today_start)
+        open_count = sum(1 for a in alerts if not a.is_acknowledged)
+        critical = sum(1 for a in alerts if not a.is_acknowledged and a.severity == "CRITICAL")
+        warning = sum(1 for a in alerts if not a.is_acknowledged and a.severity == "WARNING")
+        
+        return {
+            "total_today": total_today,
+            "open": open_count,
+            "critical": critical,
+            "warning": warning,
+        }
+
+    async def list_filtered(self, status: str, severity: str, limit: int = 100) -> list[Alert]:
+        stmt = select(AlertModel)
+        if status == "OPEN":
+            stmt = stmt.where(AlertModel.is_acknowledged.is_(False))
+        elif status == "HANDLED":
+            stmt = stmt.where(AlertModel.is_acknowledged.is_(True))
+            
+        if severity:
+            stmt = stmt.where(AlertModel.severity == severity)
+            
+        stmt = stmt.order_by(AlertModel.created_at.desc()).limit(limit)
+        result = await self._session.execute(stmt)
         return [_alert_to_entity(r) for r in result.scalars().all()]
 
 

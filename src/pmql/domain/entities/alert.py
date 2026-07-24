@@ -12,6 +12,8 @@ class Alert:
     alert_type: str = ""
     severity: str = "INFO"
     message: str = ""
+    payload: str = "{}"
+    handle_note: str = ""
     related_entity_id: str | None = None
     is_acknowledged: bool = False
     acknowledged_by: str | None = None

@@ -22,10 +22,21 @@ class Database:
             # Lightweight compatibility migration for existing local MVP DBs.
             # Production deployments should move this to Alembic.
             if self.engine.url.get_backend_name() == "sqlite":
-                for table in ("lanes", "subscribers", "cards", "fee_rules", "users"):
+                for table in ("lanes", "subscribers", "cards", "fee_rules", "users", "alerts"):
                     columns = (await conn.execute(text(f"PRAGMA table_info({table})"))).mappings().all()
                     if columns and "is_deleted" not in {column["name"] for column in columns}:
-                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
+                        try:
+                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"))
+                        except Exception:
+                            pass
+                
+                alert_columns = (await conn.execute(text("PRAGMA table_info(alerts)"))).mappings().all()
+                if alert_columns:
+                    col_names = {column["name"] for column in alert_columns}
+                    if "payload" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN payload TEXT DEFAULT '{}'"))
+                    if "handle_note" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN handle_note TEXT DEFAULT ''"))
                 # Shift columns migration
                 shift_columns = (await conn.execute(text("PRAGMA table_info(shifts)"))).mappings().all()
                 if shift_columns:

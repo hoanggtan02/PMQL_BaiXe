@@ -144,7 +144,9 @@ class LanePageMixin:
                         asyncio.run(_update_lane(self.settings, lane.id, name.text(), selected_dir, camera, rfid, barrier, is_active))
                     else:
                         asyncio.run(_create_lane(self.settings, name.text(), selected_dir, camera, rfid, barrier))
-                    self.load_lanes(); dialog.accept()
+                    self.load_lanes()
+                    if hasattr(self, 'reload_page'): self.reload_page('operations')
+                    dialog.accept()
                 except Exception as exc: show_toast(dialog, str(exc), "error")
             save.clicked.connect(do_save); dialog.exec()
 
@@ -157,6 +159,9 @@ class LanePageMixin:
 
     def delete_lane(self, lane) -> None:
             if QMessageBox.question(self, "Xóa làn", f"Xóa mềm làn '{lane.name}'?") != QMessageBox.StandardButton.Yes: return
-            try: asyncio.run(_delete_lane(self.settings, lane.id)); self.load_lanes()
+            try: 
+                asyncio.run(_delete_lane(self.settings, lane.id))
+                self.load_lanes()
+                if hasattr(self, 'reload_page'): self.reload_page('operations')
             except Exception as exc: show_toast(self, str(exc), "error")
 

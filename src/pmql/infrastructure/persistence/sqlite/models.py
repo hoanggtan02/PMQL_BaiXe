@@ -201,6 +201,8 @@ class AlertModel(Base):
     alert_type: Mapped[str] = mapped_column(String(40))
     severity: Mapped[str] = mapped_column(String(20), default="INFO")
     message: Mapped[str] = mapped_column(Text)
+    payload: Mapped[str] = mapped_column(Text, default="{}")
+    handle_note: Mapped[str] = mapped_column(Text, default="")
     related_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     is_acknowledged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     acknowledged_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

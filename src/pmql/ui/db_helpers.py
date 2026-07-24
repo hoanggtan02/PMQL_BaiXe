@@ -349,12 +349,61 @@ async def _close_shift(settings: Settings, operator_id: str, closing_cash: int =
             await CloseShiftUseCase(SQLiteShiftRepository(session), SQLiteSessionRepository(session)).execute(CloseShiftInput(operator_id, closing_cash, close_note))
     finally: await db.dispose()
 
-async def _alert_rows(settings: Settings):
+async def _alert_stats(settings: Settings):
     db = Database(settings.local_database_url)
     try:
-        async with db.session() as session: rows = await SQLiteAlertRepository(session).list_recent(100)
-        return [(a.alert_type, a.severity, a.message, a.created_at.strftime("%d/%m %H:%M"), "Đã xác nhận" if a.is_acknowledged else "Chưa xác nhận") for a in rows]
-    finally: await db.dispose()
+        async with db.session() as session:
+            return await SQLiteAlertRepository(session).get_stats()
+    finally:
+        await db.dispose()
+
+async def _alert_list(settings: Settings, status: str, severity: str):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            return await SQLiteAlertRepository(session).list_filtered(status, severity)
+    finally:
+        await db.dispose()
+
+async def _handle_alert(settings: Settings, alert_id: str, note: str, handled_by: str = "admin"):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteAlertRepository(session)
+            alert = await repo.get_by_id(alert_id)
+            if alert:
+                alert.is_acknowledged = True
+                alert.handle_note = note
+                alert.acknowledged_by = handled_by
+                from datetime import datetime
+                alert.acknowledged_at = datetime.utcnow()
+                await repo.update(alert)
+    finally:
+        await db.dispose()
+
+async def _dismiss_alert(settings: Settings, alert_id: str):
+    await _handle_alert(settings, alert_id, "", "admin")
+
+async def _handle_all_open_alerts(settings: Settings, handled_by: str = "admin"):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteAlertRepository(session)
+            open_alerts = await repo.list_unacknowledged()
+            from datetime import datetime
+            now = datetime.utcnow()
+            for alert in open_alerts:
+                alert.is_acknowledged = True
+                alert.handle_note = "Batch handled"
+                alert.acknowledged_by = handled_by
+                alert.acknowledged_at = now
+                await repo.update(alert)
+    finally:
+        await db.dispose()
+
+async def _open_barrier_alert(settings: Settings, lane_id: str):
+    # Call the hardware layer to open barrier
+    await MockBarrierController().open_barrier(lane_id)
 
 async def _fee_rules(settings: Settings):
     db = Database(settings.local_database_url)
@@ -519,4 +568,4 @@ async def _extend_subscriber(settings: Settings, subscriber_id: str, new_date):
     finally:
         await db.dispose()
 
-__all__ = ['Database', 'HardwareSignals', 'global_hw_signals', '_authenticate', '_open_shift', '_close_shift', '_entry', '_exit', '_users', '_create_user', '_update_user', '_delete_user', '_create_subscriber', '_create_fee_rule', '_update_fee_rule', '_delete_fee_rule', '_stats', '_session_rows', '_subscriber_rows', '_subscriber_entities', '_subscriber_with_vehicles', '_update_subscriber', '_delete_subscriber', '_card_rows', '_card_entities', '_card_display_rows', '_create_card', '_update_card', '_delete_card', '_lanes', '_create_lane', '_update_lane', '_delete_lane', '_shift_rows', '_shift_entities', '_create_shift', '_update_shift', '_delete_shift', '_close_shift', '_alert_rows', '_fee_rules', '_vehicle_types', '_vehicle_name_map', '_create_vehicle_type', '_update_vehicle_type', '_delete_vehicle_type', '_roles', '_permissions', '_create_permission', '_role_permissions', '_save_role', '_load_sys_settings', '_save_sys_settings', '_list_devices', '_save_device', '_delete_device', '_get_cards_for_subscriber', '_extend_subscriber']
+__all__ = ['Database', 'HardwareSignals', 'global_hw_signals', '_authenticate', '_open_shift', '_close_shift', '_entry', '_exit', '_users', '_create_user', '_update_user', '_delete_user', '_create_subscriber', '_create_fee_rule', '_update_fee_rule', '_delete_fee_rule', '_stats', '_session_rows', '_subscriber_rows', '_subscriber_entities', '_subscriber_with_vehicles', '_update_subscriber', '_delete_subscriber', '_card_rows', '_card_entities', '_card_display_rows', '_create_card', '_update_card', '_delete_card', '_lanes', '_create_lane', '_update_lane', '_delete_lane', '_shift_rows', '_shift_entities', '_create_shift', '_update_shift', '_delete_shift', '_close_shift', '_alert_stats', '_alert_list', '_handle_alert', '_dismiss_alert', '_handle_all_open_alerts', '_open_barrier_alert', '_fee_rules', '_vehicle_types', '_vehicle_name_map', '_create_vehicle_type', '_update_vehicle_type', '_delete_vehicle_type', '_roles', '_permissions', '_create_permission', '_role_permissions', '_save_role', '_load_sys_settings', '_save_sys_settings', '_list_devices', '_save_device', '_delete_device', '_get_cards_for_subscriber', '_extend_subscriber']
