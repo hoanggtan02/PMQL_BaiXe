@@ -11,3 +11,4 @@ from .vehicle_type_page import Vehicle_typePageMixin
 from .user_page import UserPageMixin
 from .settings_page import SettingsPageMixin
 from .device_page import DevicePageMixin
+from .report_page import ReportPageMixin

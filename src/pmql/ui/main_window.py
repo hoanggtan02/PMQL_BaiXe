@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime, date, timedelta
 from pmql.ui.pages import *
 
-class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPageMixin, AlertPageMixin, ShiftPageMixin, SubscriberPageMixin, CardPageMixin, FeePageMixin, LanePageMixin, Vehicle_typePageMixin, UserPageMixin, SettingsPageMixin, DevicePageMixin):
+class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPageMixin, AlertPageMixin, ShiftPageMixin, SubscriberPageMixin, CardPageMixin, FeePageMixin, LanePageMixin, Vehicle_typePageMixin, UserPageMixin, SettingsPageMixin, DevicePageMixin, ReportPageMixin):
     def __init__(self, user: object, settings) -> None:
             super().__init__()
             self.settings = settings; self.user = user; self.shift_id: str | None = None; self.nav: dict[str, QPushButton] = {}
@@ -17,7 +17,7 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             root = QWidget(); root.setObjectName("root"); layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
             layout.addWidget(self.build_sidebar()); right = QWidget(); right_layout = QVBoxLayout(right); right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(0)
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
-            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": self.alert_page, "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "self.settings": self.settings_page, "hardware": self.hardware_page}
+            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": self.alert_page, "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "self.settings": self.settings_page, "hardware": self.hardware_page, "reports": self.reports_page}
             self.pages = {key: factory() for key, factory in self.page_factories.items()}
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: [self._apply_interaction_cursors(page) for page in self.pages.values()])
@@ -75,6 +75,9 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
                     ("fees",        "◆  Biểu phí"),
                     ("lanes",       "⚙  Cấu hình làn"),
                     ("vehicle_types","▧  Loại xe"),
+                ]),
+                ("PHÂN TÍCH", [
+                    ("reports",    "📉  Báo cáo"),
                 ]),
                 ("HỆ THỐNG", [
                     ("accounts",    "♙  Tài khoản"),
