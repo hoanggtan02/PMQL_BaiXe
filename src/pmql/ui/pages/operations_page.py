@@ -40,6 +40,10 @@ class OperationsPageMixin:
         
         self.shift_button = QPushButton()
         self.shift_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        def handle_shift_click():
+            if hasattr(self, 'shift_id') and self.shift_id: self.close_shift()
+            else: self.open_shift()
+        self.shift_button.clicked.connect(handle_shift_click)
         controls_bar.addWidget(self.shift_button)
         self.setup_shift_ui()
         
@@ -234,17 +238,11 @@ class OperationsPageMixin:
         if hasattr(self, 'shift_id') and self.shift_id:
             self.shift_button.setText("⏹ Đóng ca")
             self.shift_button.setStyleSheet("background: #ef4444; color: white; border-radius: 6px; padding: 6px 16px; font-weight: bold;")
-            try: self.shift_button.clicked.disconnect()
-            except: pass
-            self.shift_button.clicked.connect(self.close_shift)
-            self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 4px 12px;")
+            self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 11px;")
         else:
             self.shift_button.setText("▶ Mở ca")
             self.shift_button.setStyleSheet("background: #22c55e; color: white; border-radius: 6px; padding: 6px 16px; font-weight: bold;")
-            try: self.shift_button.clicked.disconnect()
-            except: pass
-            self.shift_button.clicked.connect(self.open_shift)
-            self.shift_status_badge.setText("Chưa mở ca"); self.shift_status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 12px;")
+            self.shift_status_badge.setText("Chưa mở ca"); self.shift_status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 11px;")
 
     def open_shift(self) -> None:
             dialog, content, footer = modal_shell(self, "Mở ca làm việc", 740)
