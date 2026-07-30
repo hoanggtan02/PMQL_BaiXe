@@ -126,6 +126,7 @@ class ParkingSessionModel(Base):
     fee_rule_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     fee_amount: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", index=True)
+    exception_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
     entry_plate_image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     exit_plate_image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

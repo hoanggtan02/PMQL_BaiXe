@@ -139,6 +139,7 @@ def _session_to_entity(row: ParkingSessionModel) -> ParkingSession:
         fee_rule_id=row.fee_rule_id,
         fee_amount=row.fee_amount,
         status=row.status,
+        exception_note=row.exception_note,
         entry_plate_image_path=row.entry_plate_image_path,
         exit_plate_image_path=row.exit_plate_image_path,
         created_at=row.created_at,
@@ -355,9 +356,11 @@ class SQLiteCardRepository:
                 id=card.id,
                 branch_id=card.branch_id,
                 rfid_code=card.rfid_code,
+                card_type=card.card_type,
                 subscriber_id=card.subscriber_id,
                 vehicle_id=card.vehicle_id,
                 is_active=card.is_active,
+                status=card.status,
                 issued_at=card.issued_at,
                 created_at=card.created_at,
                 updated_at=card.updated_at,
@@ -551,6 +554,7 @@ class SQLiteSessionRepository:
                 fee_rule_id=parking_session.fee_rule_id,
                 fee_amount=parking_session.fee_amount,
                 status=parking_session.status,
+                exception_note=parking_session.exception_note,
                 entry_plate_image_path=parking_session.entry_plate_image_path,
                 exit_plate_image_path=parking_session.exit_plate_image_path,
                 created_at=parking_session.created_at,
@@ -594,6 +598,7 @@ class SQLiteSessionRepository:
         row.fee_rule_id = parking_session.fee_rule_id
         row.fee_amount = parking_session.fee_amount
         row.status = parking_session.status
+        row.exception_note = parking_session.exception_note
         row.exit_plate_image_path = parking_session.exit_plate_image_path
         row.updated_at = parking_session.updated_at
         row.sync_version = parking_session.sync_version

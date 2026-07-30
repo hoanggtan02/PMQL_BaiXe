@@ -55,18 +55,28 @@ async def _close_shift(settings: Settings, user_id: str, actual_ending_cash: int
             return await CloseShiftUseCase(SQLiteShiftRepository(session), SQLiteSessionRepository(session)).execute(CloseShiftInput(user_id, actual_ending_cash, closing_notes))
     finally: await db.dispose()
 
-async def _entry(settings: Settings, lane_id: str, plate: str, vehicle: str, shift_id: str) -> str:
+async def _entry(settings: Settings, lane_id: str, plate: str, vehicle: str, shift_id: str, card_uid: str = "") -> str:
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
-            output = await VehicleEntryUseCase(SQLiteSessionRepository(session), SQLiteVehicleRepository(session), SQLiteCardRepository(session), SQLiteFeeRuleRepository(session), SQLiteSubscriberRepository(session), SQLiteLaneRepository(session), MockBarrierController(), SQLiteSyncOutboxWriter(session)).execute(VehicleEntryInput(lane_id, plate_number=plate, vehicle_type=vehicle, shift_id=shift_id)); return output.session_id
+            output = await VehicleEntryUseCase(SQLiteSessionRepository(session), SQLiteVehicleRepository(session), SQLiteCardRepository(session), SQLiteFeeRuleRepository(session), SQLiteSubscriberRepository(session), SQLiteLaneRepository(session), MockBarrierController(), SQLiteSyncOutboxWriter(session)).execute(VehicleEntryInput(lane_id, rfid_code=card_uid or None, plate_number=plate or None, vehicle_type=vehicle, shift_id=shift_id)); return output.session_id
     finally: await db.dispose()
 
-async def _exit(settings: Settings, lane_id: str, plate: str) -> tuple[int, int]:
+async def _get_available_guest_cards(settings: Settings) -> list[str]:
     db = Database(settings.local_database_url)
     try:
         async with db.session() as session:
-            output = await VehicleExitUseCase(SQLiteSessionRepository(session), SQLiteCardRepository(session), SQLiteFeeRuleRepository(session), SQLiteSubscriberRepository(session), SQLiteVehicleRepository(session), MockBarrierController(), FeeCalculator(), SQLiteSyncOutboxWriter(session)).execute(VehicleExitInput(lane_id, plate_number=plate)); return output.fee_amount, output.duration_minutes
+            from sqlalchemy import select
+            from pmql.infrastructure.persistence.sqlite.models import CardModel
+            res = await session.execute(select(CardModel.card_uid).where(CardModel.status == "AVAILABLE", CardModel.card_type == "GUEST").limit(50))
+            return list(res.scalars().all())
+    finally: await db.dispose()
+
+async def _exit(settings: Settings, lane_id: str, plate: str, card_uid: str = "") -> tuple[int, int]:
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            output = await VehicleExitUseCase(SQLiteSessionRepository(session), SQLiteCardRepository(session), SQLiteFeeRuleRepository(session), SQLiteSubscriberRepository(session), SQLiteVehicleRepository(session), MockBarrierController(), FeeCalculator(), SQLiteSyncOutboxWriter(session)).execute(VehicleExitInput(lane_id, rfid_code=card_uid or None, plate_number=plate or None)); return output.fee_amount, output.duration_minutes
     finally: await db.dispose()
 
 async def _users(settings: Settings):
@@ -142,6 +152,13 @@ async def _stats(settings: Settings, shift_id: str | None) -> dict[str, object]:
             users = await SQLiteUserRepository(session).list_all()
             lanes = await SQLiteLaneRepository(session).list_active(settings.branch_id)
         active = [s for s in sessions if s.status == "ACTIVE"]
+        from sqlalchemy import text
+        v_res = await session.execute(text("SELECT id, vehicle_type FROM vehicles"))
+        v_id_map = {r.id: r.vehicle_type for r in v_res.mappings()}
+        for s in active:
+            if s.vehicle_id and s.vehicle_id in v_id_map:
+                s.vehicle_type = v_id_map[s.vehicle_id]
+        
         today = date.today()
         closed = [s for s in sessions if s.exit_time and s.exit_time.date() == today]
         # Build sessions_detail for live table
@@ -158,6 +175,7 @@ async def _stats(settings: Settings, shift_id: str | None) -> dict[str, object]:
                 "vehicle_type": getattr(s, 'vehicle_type', 'Xe máy'),
                 "entry_time": s.entry_time.strftime("%H:%M:%S %d/%m/%Y"),
                 "duration": fmt_duration(s.entry_time),
+                "subscriber_id": s.subscriber_id,
             })
         return {
             "active": len(active),
@@ -568,4 +586,16 @@ async def _extend_subscriber(settings: Settings, subscriber_id: str, new_date):
     finally:
         await db.dispose()
 
-__all__ = ['Database', 'HardwareSignals', 'global_hw_signals', '_authenticate', '_open_shift', '_close_shift', '_entry', '_exit', '_users', '_create_user', '_update_user', '_delete_user', '_create_subscriber', '_create_fee_rule', '_update_fee_rule', '_delete_fee_rule', '_stats', '_session_rows', '_subscriber_rows', '_subscriber_entities', '_subscriber_with_vehicles', '_update_subscriber', '_delete_subscriber', '_card_rows', '_card_entities', '_card_display_rows', '_create_card', '_update_card', '_delete_card', '_lanes', '_create_lane', '_update_lane', '_delete_lane', '_shift_rows', '_shift_entities', '_create_shift', '_update_shift', '_delete_shift', '_close_shift', '_alert_stats', '_alert_list', '_handle_alert', '_dismiss_alert', '_handle_all_open_alerts', '_open_barrier_alert', '_fee_rules', '_vehicle_types', '_vehicle_name_map', '_create_vehicle_type', '_update_vehicle_type', '_delete_vehicle_type', '_roles', '_permissions', '_create_permission', '_role_permissions', '_save_role', '_load_sys_settings', '_save_sys_settings', '_list_devices', '_save_device', '_delete_device', '_get_cards_for_subscriber', '_extend_subscriber']
+async def _mark_exception(settings: Settings, session_id: str, note: str):
+    db = Database(settings.local_database_url)
+    try:
+        async with db.session() as session:
+            repo = SQLiteSessionRepository(session)
+            parking_session = await repo.get_by_id(session_id)
+            if not parking_session: raise ValueError("Không tìm thấy phiên gửi xe")
+            parking_session.mark_exception(note, datetime.utcnow())
+            await repo.update(parking_session)
+    finally:
+        await db.dispose()
+
+__all__ = ['Database', 'HardwareSignals', 'global_hw_signals', '_authenticate', '_open_shift', '_close_shift', '_entry', '_exit', '_users', '_create_user', '_update_user', '_delete_user', '_create_subscriber', '_create_fee_rule', '_update_fee_rule', '_delete_fee_rule', '_stats', '_session_rows', '_subscriber_rows', '_subscriber_entities', '_subscriber_with_vehicles', '_update_subscriber', '_delete_subscriber', '_card_rows', '_card_entities', '_card_display_rows', '_create_card', '_update_card', '_delete_card', '_lanes', '_create_lane', '_update_lane', '_delete_lane', '_shift_rows', '_shift_entities', '_create_shift', '_update_shift', '_delete_shift', '_close_shift', '_alert_stats', '_alert_list', '_handle_alert', '_dismiss_alert', '_handle_all_open_alerts', '_open_barrier_alert', '_fee_rules', '_vehicle_types', '_vehicle_name_map', '_create_vehicle_type', '_update_vehicle_type', '_delete_vehicle_type', '_roles', '_permissions', '_create_permission', '_role_permissions', '_save_role', '_load_sys_settings', '_save_sys_settings', '_list_devices', '_save_device', '_delete_device', '_get_cards_for_subscriber', '_extend_subscriber', '_mark_exception']

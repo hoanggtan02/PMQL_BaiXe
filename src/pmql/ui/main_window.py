@@ -177,11 +177,13 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             return bar
 
     def go(self, key: str) -> None:
+            if key not in {"overview", "operations", "hardware", "self.settings"}:
+                self.reload_page(key, navigate=False)
             self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Kết nối & Cài đặt thiết bị thật", "reports": "Báo cáo & Thống kê"}[key])
             for item_key, button in self.nav.items(): button.setProperty("active", item_key == key); button.style().unpolish(button); button.style().polish(button)
             if key in {"overview", "operations"}: self.refresh_live()
 
-    def reload_page(self, key: str) -> None:
+    def reload_page(self, key: str, navigate: bool = True) -> None:
             """Recreate a data page so CRUD changes are visible immediately."""
             old_page = self.pages[key]
             index = self.stack.indexOf(old_page)
@@ -191,7 +193,8 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             self.stack.insertWidget(index, new_page)
             self.pages[key] = new_page
             self._apply_interaction_cursors(new_page)
-            self.go(key)
+            if navigate:
+                self.go(key)
 
     def page(self) -> tuple[QWidget, QVBoxLayout]:
             page = QWidget(); page.setObjectName("page")

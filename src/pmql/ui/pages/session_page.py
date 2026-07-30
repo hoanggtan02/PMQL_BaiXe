@@ -92,21 +92,33 @@ class SessionPageMixin:
                 try:
                     db = Database(self.settings.local_database_url)
                     import asyncio
-                    from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSessionRepository, SQLiteVehicleRepository, SQLiteLaneRepository
+                    from pmql.infrastructure.persistence.sqlite.repositories import SQLiteSessionRepository, SQLiteVehicleRepository, SQLiteLaneRepository, SQLiteCardRepository
                     
                     async def fetch():
                         async with db.session() as session:
                             s_repo = SQLiteSessionRepository(session)
                             l_repo = SQLiteLaneRepository(session)
+                            c_repo = SQLiteCardRepository(session)
                             
                             all_sessions = await s_repo.list_recent(self.settings.branch_id, 5000)
                             lanes = await l_repo.list_active()
-                            l_map = {l.id: l.name for l in lanes}
+                            cards = await c_repo.list_all()
                             
-                            return all_sessions, l_map
+                            from sqlalchemy import text
+                            v_res = await session.execute(text("SELECT id, vehicle_type FROM vehicles"))
+                            v_id_map = {r.id: r.vehicle_type for r in v_res.mappings()}
+                            
+                            l_map = {l.id: l.name for l in lanes}
+                            c_map = {c.id: c.rfid_code for c in cards}
+                            
+                            for s in all_sessions:
+                                if s.vehicle_id and s.vehicle_id in v_id_map:
+                                    s.vehicle_type = v_id_map[s.vehicle_id]
+                            
+                            return all_sessions, l_map, c_map
                     
                     v_map = asyncio.run(_vehicle_name_map(self.settings))
-                    all_sessions, l_map = asyncio.run(fetch())
+                    all_sessions, l_map, c_map = asyncio.run(fetch())
                     
                     active = [s for s in all_sessions if s.status == "ACTIVE"]
                     val_lbl.setText(str(len(active)))
@@ -115,48 +127,61 @@ class SessionPageMixin:
                     tbl_active.setRowCount(len(active))
                     from PySide6.QtGui import QColor as _QC
                     for r, s in enumerate(active):
-                        card_lbl = label(s.rfid_card_id or "-", bold=True)
-                        card_lbl.setStyleSheet("color: #ef4444;")
-                        tbl_active.setCellWidget(r, 0, card_lbl)
+                        card_str = c_map.get(s.rfid_card_id, "-") if s.rfid_card_id else "-"
+                        card_item = QTableWidgetItem(card_str)
+                        card_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setItem(r, 0, card_item)
                         
                         plate_lbl = label(s.plate_number or "-", bold=True)
                         plate_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_lbl.adjustSize(); plate_lbl.setMinimumWidth(plate_lbl.sizeHint().width())
                         plate_w = QWidget(); p_ly = QHBoxLayout(plate_w); p_ly.setContentsMargins(0,0,0,0); p_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p_ly.addWidget(plate_lbl)
                         tbl_active.setCellWidget(r, 1, plate_w)
                         
                         v_name = v_map.get(s.vehicle_type, "Xe máy") if hasattr(s, 'vehicle_type') else "Xe máy"
                         v_icon = "🛵" if "máy" in v_name.lower() else "🚗"
-                        v_lbl = label(f"{v_icon} {v_name}")
-                        v_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        tbl_active.setCellWidget(r, 2, v_lbl)
+                        v_item = QTableWidgetItem(f"{v_icon} {v_name}")
+                        v_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setItem(r, 2, v_item)
                         
                         type_badge = label("Thuê bao" if s.subscriber_id else "Vãng lai")
                         type_badge.setStyleSheet("background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; color: #475569; font-size: 11px;")
+                        type_badge.adjustSize(); type_badge.setMinimumWidth(type_badge.sizeHint().width())
                         type_w = QWidget(); ty_ly = QHBoxLayout(type_w); ty_ly.setContentsMargins(0,0,0,0); ty_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); ty_ly.addWidget(type_badge)
                         tbl_active.setCellWidget(r, 3, type_w)
                         
                         entry_str = s.entry_time.strftime("%H:%M:%S %d/%m/%Y")
-                        e_lbl = label(entry_str)
-                        e_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        tbl_active.setCellWidget(r, 4, e_lbl)
+                        e_item = QTableWidgetItem(entry_str)
+                        e_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setItem(r, 4, e_item)
                         
                         now = QDateTime.currentDateTime().toPython()
                         mins = int((now - s.entry_time).total_seconds() / 60)
                         hrs, mins = divmod(mins, 60)
                         dur_lbl = label(f"{hrs}g {mins}p", bold=True)
                         dur_lbl.setStyleSheet("background: #38bdf8; color: white; border-radius: 4px; padding: 2px 6px;")
+                        dur_lbl.adjustSize(); dur_lbl.setMinimumWidth(dur_lbl.sizeHint().width())
                         dur_w = QWidget(); d_ly = QHBoxLayout(dur_w); d_ly.setContentsMargins(0,0,0,0); d_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); d_ly.addWidget(dur_lbl)
                         tbl_active.setCellWidget(r, 5, dur_w)
                         
                         l_name = l_map.get(s.lane_in_id, "Làn vào")
-                        ln_lbl = label(l_name)
-                        ln_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        tbl_active.setCellWidget(r, 6, ln_lbl)
+                        ln_item = QTableWidgetItem(l_name)
+                        ln_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_active.setItem(r, 6, ln_item)
                         
                         btn_exc = QPushButton("Ngoại lệ")
                         btn_exc.setStyleSheet("QPushButton { color: #ef4444; background: white; border: 1px solid #ef4444; border-radius: 4px; padding: 2px 8px; }")
+                        def make_exception_handler(sid):
+                            def _handle():
+                                note, ok = QInputDialog.getText(btn_exc, "Ngoại lệ", "Ghi chú ngoại lệ:")
+                                if ok and note.strip():
+                                    asyncio.run(_mark_exception(self.settings, sid, note.strip()))
+                                    load_sessions()
+                            return _handle
+                        btn_exc.clicked.connect(make_exception_handler(s.id))
                         b_w = QWidget(); b_ly = QHBoxLayout(b_w); b_ly.setContentsMargins(0,0,0,0); b_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); b_ly.addWidget(btn_exc)
                         tbl_active.setCellWidget(r, 7, b_w)
+                        tbl_active.setRowHeight(r, 56)
                         
                     # Populate History
                     start_d = dt_from.date().toPython()
@@ -173,27 +198,32 @@ class SessionPageMixin:
                     total_lbl.setText(f"Tổng: {len(history)} phiên")
                     tbl_history.setRowCount(len(history))
                     for r, s in enumerate(history):
-                        card_lbl = label(s.rfid_card_id or "-", bold=True); card_lbl.setStyleSheet("color: #ef4444;")
-                        tbl_history.setCellWidget(r, 0, card_lbl)
+                        h_card_str = c_map.get(s.rfid_card_id, "-") if s.rfid_card_id else "-"
+                        h_card_item = QTableWidgetItem(h_card_str)
+                        h_card_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_history.setItem(r, 0, h_card_item)
                         
                         plate_lbl = label(s.plate_number or "-", bold=True); plate_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_lbl.adjustSize(); plate_lbl.setMinimumWidth(plate_lbl.sizeHint().width())
                         plate_w = QWidget(); p_ly = QHBoxLayout(plate_w); p_ly.setContentsMargins(0,0,0,0); p_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p_ly.addWidget(plate_lbl)
                         tbl_history.setCellWidget(r, 1, plate_w)
                         
                         plate_out_lbl = label(s.plate_number or "-", bold=True); plate_out_lbl.setStyleSheet("background: #fef08a; border: 1px solid #facc15; border-radius: 4px; padding: 2px 6px; color: #1e293b;")
+                        plate_out_lbl.adjustSize(); plate_out_lbl.setMinimumWidth(plate_out_lbl.sizeHint().width())
                         plate_out_w = QWidget(); p2_ly = QHBoxLayout(plate_out_w); p2_ly.setContentsMargins(0,0,0,0); p2_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); p2_ly.addWidget(plate_out_lbl)
                         tbl_history.setCellWidget(r, 2, plate_out_w)
                         
                         type_badge = label("Thuê bao" if s.subscriber_id else "Vãng lai")
                         type_badge.setStyleSheet("background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; color: #475569; font-size: 11px;")
+                        type_badge.adjustSize(); type_badge.setMinimumWidth(type_badge.sizeHint().width())
                         type_w = QWidget(); ty_ly = QHBoxLayout(type_w); ty_ly.setContentsMargins(0,0,0,0); ty_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); ty_ly.addWidget(type_badge)
                         tbl_history.setCellWidget(r, 3, type_w)
                         
-                        e_lbl = label(s.entry_time.strftime("%H:%M:%S %d/%m/%Y")); e_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        tbl_history.setCellWidget(r, 4, e_lbl)
+                        e_item = QTableWidgetItem(s.entry_time.strftime("%H:%M:%S %d/%m/%Y")); e_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_history.setItem(r, 4, e_item)
                         
-                        ex_lbl = label(s.exit_time.strftime("%H:%M:%S %d/%m/%Y") if s.exit_time else "-"); ex_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                        tbl_history.setCellWidget(r, 5, ex_lbl)
+                        ex_item = QTableWidgetItem(s.exit_time.strftime("%H:%M:%S %d/%m/%Y") if s.exit_time else "-"); ex_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        tbl_history.setItem(r, 5, ex_item)
                         
                         dur_str = "-"
                         if s.exit_time:
@@ -207,10 +237,18 @@ class SessionPageMixin:
                         tbl_history.setItem(r, 7, QTableWidgetItem(fee_str))
                         tbl_history.item(r, 7).setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         
-                        status_badge = label("Đã ra")
-                        status_badge.setStyleSheet("background: #dcfce7; border: 1px solid #86efac; border-radius: 4px; padding: 2px 6px; color: #166534; font-size: 11px;")
+                        if s.status == "EXCEPTION":
+                            status_badge = label("Ngoại lệ")
+                            status_badge.setStyleSheet("background: #fee2e2; border: 1px solid #fca5a5; border-radius: 4px; padding: 2px 6px; color: #991b1b; font-size: 11px;")
+                            if hasattr(s, 'exception_note') and s.exception_note:
+                                status_badge.setToolTip(f"Ghi chú: {s.exception_note}")
+                        else:
+                            status_badge = label("Đã ra")
+                            status_badge.setStyleSheet("background: #dcfce7; border: 1px solid #86efac; border-radius: 4px; padding: 2px 6px; color: #166534; font-size: 11px;")
+                        status_badge.adjustSize(); status_badge.setMinimumWidth(status_badge.sizeHint().width())
                         st_w = QWidget(); st_ly = QHBoxLayout(st_w); st_ly.setContentsMargins(0,0,0,0); st_ly.setAlignment(Qt.AlignmentFlag.AlignCenter); st_ly.addWidget(status_badge)
                         tbl_history.setCellWidget(r, 8, st_w)
+                        tbl_history.setRowHeight(r, 56)
                         
                 except Exception as exc:
                     print("Error loading sessions:", exc)

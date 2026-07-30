@@ -79,6 +79,12 @@ class Database:
                         await conn.execute(text("ALTER TABLE cards ADD COLUMN card_type VARCHAR(20) NOT NULL DEFAULT 'GUEST'"))
                     if "status" not in col_names:
                         await conn.execute(text("ALTER TABLE cards ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE'"))
+                # Session columns migration
+                session_columns = (await conn.execute(text("PRAGMA table_info(sessions)"))).mappings().all()
+                if session_columns:
+                    col_names = {column["name"] for column in session_columns}
+                    if "exception_note" not in col_names:
+                        await conn.execute(text("ALTER TABLE sessions ADD COLUMN exception_note VARCHAR(255) NULL"))
             await conn.run_sync(Base.metadata.create_all)
 
     @asynccontextmanager

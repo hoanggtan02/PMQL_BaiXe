@@ -25,6 +25,7 @@ class ParkingSession:
     fee_rule_id: str | None = None
     fee_amount: int = 0  # VND — ALWAYS int, NEVER float
     status: str = "ACTIVE"  # 'ACTIVE' | 'CLOSED' | 'EXCEPTION'
+    exception_note: str | None = None
     entry_plate_image_path: str | None = None
     exit_plate_image_path: str | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
@@ -37,5 +38,12 @@ class ParkingSession:
         self.fee_amount = fee_amount
         self.lane_out_id = lane_out_id
         self.status = "CLOSED"
-        self.updated_at = datetime.utcnow()
+        self.sync_version += 1
+
+    def mark_exception(self, note: str, current_time: datetime) -> None:
+        """Mark session as exception (force closed due to issue)."""
+        self.status = "EXCEPTION"
+        self.exception_note = note
+        self.exit_time = current_time
+        self.updated_at = current_time
         self.sync_version += 1
