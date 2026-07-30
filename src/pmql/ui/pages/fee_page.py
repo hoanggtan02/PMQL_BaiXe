@@ -18,6 +18,7 @@ class FeePageMixin:
             
             add_btn = icon_btn("fa5s.plus", "Thêm quy tắc phí", _BTN_EDIT_STYLE.replace("#3b82f6", "#f97316"))
             add_btn.clicked.connect(self.add_fee_rule)
+            if "fee.add" not in getattr(self, "permission_codes", set()): add_btn.setVisible(False)
             hrow.addWidget(add_btn)
             box.addLayout(hrow)
     
@@ -91,6 +92,8 @@ class FeePageMixin:
                 a_row = QHBoxLayout(); a_row.setContentsMargins(0, 0, 0, 0)
                 edit_btn = icon_btn("fa5s.edit", "Sửa", "QPushButton { color: #3b82f6; background: transparent; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 12px; font-weight: bold; } QPushButton:hover { background: #eff6ff; }", icon_color="#3b82f6")
                 del_btn = icon_btn("fa5s.trash-alt", "", "QPushButton { color: #ef4444; background: transparent; border: 1px solid #fecaca; border-radius: 6px; padding: 6px 10px; font-weight: bold; } QPushButton:hover { background: #fef2f2; }", icon_color="#ef4444")
+                if "fee.edit" not in getattr(self, "permission_codes", set()): edit_btn.setVisible(False)
+                if "fee.delete" not in getattr(self, "permission_codes", set()): del_btn.setVisible(False)
                 
                 edit_btn.clicked.connect(lambda _=False, item=rule: self.edit_fee_rule(item))
                 del_btn.clicked.connect(lambda _=False, item=rule: self.delete_fee_rule(item))

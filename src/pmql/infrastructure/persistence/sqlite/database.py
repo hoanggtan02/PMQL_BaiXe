@@ -37,6 +37,18 @@ class Database:
                         await conn.execute(text("ALTER TABLE alerts ADD COLUMN payload TEXT DEFAULT '{}'"))
                     if "handle_note" not in col_names:
                         await conn.execute(text("ALTER TABLE alerts ADD COLUMN handle_note TEXT DEFAULT ''"))
+                    if "severity" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN severity VARCHAR(20) DEFAULT 'INFO'"))
+                    if "related_entity_id" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN related_entity_id VARCHAR(36) NULL"))
+                    if "is_acknowledged" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN is_acknowledged BOOLEAN NOT NULL DEFAULT 0"))
+                    if "acknowledged_by" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN acknowledged_by VARCHAR(36) NULL"))
+                    if "acknowledged_at" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN acknowledged_at DATETIME NULL"))
+                    if "sync_version" not in col_names:
+                        await conn.execute(text("ALTER TABLE alerts ADD COLUMN sync_version INTEGER NOT NULL DEFAULT 1"))
                 # Shift columns migration
                 shift_columns = (await conn.execute(text("PRAGMA table_info(shifts)"))).mappings().all()
                 if shift_columns:

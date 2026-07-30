@@ -85,7 +85,7 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
                     ("hardware",    "⚡  Kết nối TB"),
                 ]),
             ]
-            required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.manage", "shifts": "shift.manage", "subscribers": "subscriber.manage", "cards": "card.manage", "fees": "fee.manage", "lanes": "lane.view", "vehicle_types": "fee.manage", "accounts": "user.manage"}
+            required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.view", "shifts": "shift.view", "subscribers": "subscriber.view", "cards": "card.view", "fees": "fee.view", "lanes": "lane.view", "vehicle_types": "fee.view", "accounts": "user.view", "hardware": "device.view", "reports": "report.view"}
             for group, links in groups:
                 if group:
                     g_lbl = label(group, "section")
@@ -177,7 +177,7 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             return bar
 
     def go(self, key: str) -> None:
-            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Kết nối & Cài đặt thiết bị thật"}[key])
+            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Kết nối & Cài đặt thiết bị thật", "reports": "Báo cáo & Thống kê"}[key])
             for item_key, button in self.nav.items(): button.setProperty("active", item_key == key); button.style().unpolish(button); button.style().polish(button)
             if key in {"overview", "operations"}: self.refresh_live()
 

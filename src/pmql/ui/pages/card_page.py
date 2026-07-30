@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 class CardPageMixin:
     def card_page(self) -> QWidget:
             page, box = self.page(); row = QHBoxLayout(); title = label("Quản lý thẻ RFID", bold=True); title.setStyleSheet("font-size:24px;"); row.addWidget(title); row.addStretch(); add = QPushButton("+ Thêm thẻ"); add.setObjectName("primary"); add.clicked.connect(self.add_card); row.addWidget(add); box.addLayout(row)
+            if "card.add" not in getattr(self, "permission_codes", set()): add.setVisible(False)
             self.card_table = self.make_table(["Mã thẻ (UID)", "Loại thẻ", "Thuê bao", "Trạng thái", "Thao tác"], action_col_width=300); box.addWidget(self.card_table, 1); self.load_cards(); return page
 
     def load_cards(self) -> None:
@@ -52,6 +53,8 @@ class CardPageMixin:
                 status_combo.addItem("↻ Đổi TT", "")
                 for text, val in [("Có sẵn", "AVAILABLE"), ("Đang dùng", "IN_USE"), ("Đã mất", "LOST"), ("Bị khóa", "LOCKED")]:
                     status_combo.addItem(text, val)
+                if "card.edit" not in getattr(self, "permission_codes", set()):
+                    status_combo.setEnabled(False)
                     
                 def _change_card_status(index, item_card=card, combo=status_combo):
                     val = combo.itemData(index)
@@ -68,6 +71,8 @@ class CardPageMixin:
                 
                 edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE)
                 remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
+                if "card.edit" not in getattr(self, "permission_codes", set()): edit.setVisible(False)
+                if "card.delete" not in getattr(self, "permission_codes", set()): remove.setVisible(False)
                 edit.clicked.connect(lambda _=False, item=card: self.edit_card(item))
                 remove.clicked.connect(lambda _=False, item=card: self.delete_card(item))
                 actions_row.addWidget(status_combo); actions_row.addWidget(edit); actions_row.addWidget(remove)

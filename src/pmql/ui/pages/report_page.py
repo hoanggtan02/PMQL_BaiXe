@@ -1,151 +1,268 @@
 from PySide6.QtWidgets import *
 from PySide6.QtCore import *
 from PySide6.QtGui import *
-from PySide6.QtCharts import QChart, QChartView, QLineSeries, QPieSeries, QPieSlice, QBarSeries, QBarSet, QValueAxis, QBarCategoryAxis
+from PySide6.QtCharts import (
+    QChart, QChartView, QLineSeries, QPieSeries, QPieSlice,
+    QAreaSeries, QValueAxis
+)
 from pmql.ui.components import *
+from pmql.ui.db_helpers import *
+import asyncio
+from datetime import datetime, date, timedelta
+
 
 class ReportPageMixin:
     def reports_page(self) -> QWidget:
-        page = QWidget(); page.setObjectName("page")
-        page.setStyleSheet("QWidget#page { background: #f8fafc; }")
-        layout = QVBoxLayout(page); layout.setContentsMargins(28, 20, 28, 28); layout.setSpacing(20)
+        page, box = self.page()
+        box.setContentsMargins(24, 20, 24, 24)
+        box.setSpacing(16)
 
-        # Header with title and time filters
-        header_row = QHBoxLayout()
-        title_box = QVBoxLayout(); title_box.setSpacing(4)
-        title = label("Khoảng thời gian", "muted"); title.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
-        title_box.addWidget(title)
-        
+        # ── Top filter bar ─────────────────────────────────────────────
         filter_row = QHBoxLayout(); filter_row.setSpacing(8)
-        btn_today = QPushButton("Hôm nay"); btn_today.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_today.setStyleSheet("QPushButton { background: #f97316; color: white; border: none; border-radius: 16px; padding: 6px 16px; font-weight: 600; }")
-        filter_row.addWidget(btn_today)
-        
-        for text in ["7 ngày", "Tháng này", "Tùy chọn"]:
-            btn = QPushButton(text); btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setStyleSheet("QPushButton { background: white; color: #475569; border: 1px solid #cbd5e1; border-radius: 16px; padding: 6px 16px; font-weight: 600; }")
+
+        lbl_range = label("Khoảng thời gian", "muted")
+        lbl_range.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
+        filter_row.addWidget(lbl_range)
+        filter_row.addSpacing(8)
+
+        period_btns = []
+        for i, text in enumerate(["Hôm nay", "7 ngày", "Tháng này", "Tùy chọn"]):
+            btn = QPushButton(text)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            active_style = "QPushButton { background: #f97316; color: white; border: none; border-radius: 14px; padding: 6px 16px; font-weight: 700; font-size: 12px; }"
+            idle_style   = "QPushButton { background: white; color: #475569; border: 1px solid #e2e8f0; border-radius: 14px; padding: 6px 16px; font-weight: 600; font-size: 12px; } QPushButton:hover { background: #f8fafc; }"
+            btn.setStyleSheet(active_style if i == 0 else idle_style)
+            period_btns.append((btn, active_style, idle_style))
             filter_row.addWidget(btn)
-        
-        title_box.addLayout(filter_row)
-        header_row.addLayout(title_box)
-        header_row.addStretch()
-        
-        # Actions: Xem báo cáo, Xuất
-        actions_row = QHBoxLayout(); actions_row.setAlignment(Qt.AlignmentFlag.AlignBottom)
-        view_btn = QPushButton("🔍 Xem báo cáo"); view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        view_btn.setStyleSheet("QPushButton { background: #f97316; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: bold; } QPushButton:hover { background: #ea580c; }")
-        export_btn = QPushButton("📥 Xuất ▾"); export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.setStyleSheet("QPushButton { background: white; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 16px; font-weight: bold; }")
-        actions_row.addWidget(view_btn); actions_row.addWidget(export_btn)
-        header_row.addLayout(actions_row)
-        
-        layout.addLayout(header_row)
 
-        # 4 Metric Cards
-        cards_layout = QHBoxLayout(); cards_layout.setSpacing(16)
-        metrics = [
-            ("Tổng doanh thu", "0 đ", "💵 Đã thu", "#fff7ed", "#ea580c"),
-            ("Tổng lượt gửi", "1", "🚗 Xe hoàn thành", "#f0fdf4", "#3b82f6"),
-            ("Doanh thu vãng lai", "0 đ", "👤 Khách vãng lai", "#f0fdf4", "#16a34a"),
-            ("Doanh thu thuê bao", "0 đ", "💳 Thuê bao tháng", "#faf5ff", "#9333ea")
+        def select_period(idx):
+            for j, (b, a_s, i_s) in enumerate(period_btns):
+                b.setStyleSheet(a_s if j == idx else i_s)
+
+        for i, (btn, _, _) in enumerate(period_btns):
+            btn.clicked.connect(lambda _, i=i: select_period(i))
+
+        filter_row.addStretch()
+
+        # Right-side action buttons
+        btn_view = QPushButton("🔍  Xem báo cáo")
+        btn_view.setObjectName("primary")
+        btn_view.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_view.setStyleSheet("QPushButton { background: #f97316; color: white; border: none; border-radius: 8px; padding: 8px 18px; font-weight: 700; font-size: 13px; } QPushButton:hover { background: #ea580c; }")
+
+        btn_export = QPushButton("📥  Xuất  ▾")
+        btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_export.setStyleSheet("QPushButton { background: white; color: #475569; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 16px; font-weight: 600; font-size: 13px; } QPushButton:hover { background: #f8fafc; }")
+
+        filter_row.addWidget(btn_view)
+        filter_row.addWidget(btn_export)
+        box.addLayout(filter_row)
+
+        # ── 4 Summary metric cards ──────────────────────────────────────
+        cards_row = QHBoxLayout(); cards_row.setSpacing(14)
+        metric_defs = [
+            ("Tổng doanh thu",     "0 đ", "💵 Đã thu",          "#fff7ed", "#ea580c"),
+            ("Tổng lượt gửi",     "0",   "🚗 Xe hoàn thành",   "#eff6ff", "#3b82f6"),
+            ("Doanh thu vãng lai", "0 đ", "👤 Khách vãng lai",  "#f0fdf4", "#16a34a"),
+            ("Doanh thu thuê bao", "0 đ", "💳 Thuê bao tháng",  "#faf5ff", "#9333ea"),
         ]
-        for title, value, sub, bg, color in metrics:
-            card = QFrame(); card.setStyleSheet(f"QFrame {{ background: {bg}; border: 1px solid #e2e8f0; border-radius: 8px; }}")
-            card_lay = QVBoxLayout(card); card_lay.setContentsMargins(16, 16, 16, 16); card_lay.setSpacing(4)
-            t_lbl = label(title); t_lbl.setStyleSheet("color: #64748b; font-size: 11px;")
-            v_lbl = label(value, bold=True); v_lbl.setStyleSheet(f"color: {color}; font-size: 24px; font-weight: 800; border: none;")
-            s_lbl = label(sub); s_lbl.setStyleSheet(f"color: {color}; font-size: 11px; border: none;")
-            card_lay.addWidget(t_lbl); card_lay.addWidget(v_lbl); card_lay.addWidget(s_lbl)
-            cards_layout.addWidget(card)
-        layout.addLayout(cards_layout)
+        for title_txt, value, sub, bg, color in metric_defs:
+            card = QFrame()
+            card.setStyleSheet(f"QFrame {{ background: {bg}; border: none; border-radius: 12px; }}")
+            card.setMinimumHeight(100)
+            cl = QVBoxLayout(card); cl.setContentsMargins(18, 16, 18, 16); cl.setSpacing(4)
 
-        # Main Charts Area
-        charts_layout = QGridLayout(); charts_layout.setSpacing(16)
-        
-        # 1. Doanh thu theo giờ (Line Chart)
-        rev_frame = QFrame(); rev_frame.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
-        rev_lay = QVBoxLayout(rev_frame); rev_lay.setContentsMargins(16, 16, 16, 16)
-        rev_header = QHBoxLayout()
-        rev_title = label("📈 Doanh thu theo giờ", bold=True); rev_title.setStyleSheet("color: #f97316; font-size: 14px; border: none;")
-        rev_header.addWidget(rev_title); rev_header.addStretch()
-        
-        rev_chart = QChart(); rev_chart.legend().hide(); rev_chart.setMargins(QMargins(0,0,0,0))
-        series = QLineSeries(); series.append(0, 0); series.append(23, 0)
-        pen = QPen(QColor("#f97316")); pen.setWidth(2); series.setPen(pen)
-        rev_chart.addSeries(series)
-        axis_x = QValueAxis(); axis_x.setRange(0, 23); axis_x.setTickCount(24); axis_x.setLabelFormat("%d:00")
-        axis_y = QValueAxis(); axis_y.setRange(0, 1); axis_y.setTickCount(6)
-        rev_chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom); rev_chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
-        series.attachAxis(axis_x); series.attachAxis(axis_y)
-        
-        rev_view = QChartView(rev_chart); rev_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rev_view.setStyleSheet("border: none; background: transparent;")
-        rev_lay.addLayout(rev_header); rev_lay.addWidget(rev_view)
-        charts_layout.addWidget(rev_frame, 0, 0, 1, 2)
-        
-        # 2. Phân loại xe (Pie Chart)
-        pie_frame = QFrame(); pie_frame.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
-        pie_lay = QVBoxLayout(pie_frame); pie_lay.setContentsMargins(16, 16, 16, 16)
-        pie_title = label("🥧 Phân loại xe", bold=True); pie_title.setStyleSheet("color: #f97316; font-size: 14px; border: none;")
+            t_lbl = label(title_txt)
+            t_lbl.setStyleSheet("color: #64748b; font-size: 12px; font-weight: 600;")
+            cl.addWidget(t_lbl)
+
+            v_lbl = label(value, bold=True)
+            v_lbl.setStyleSheet(f"color: {color}; font-size: 28px; font-weight: 800; background: transparent;")
+            cl.addWidget(v_lbl)
+
+            s_lbl = label(sub)
+            s_lbl.setStyleSheet(f"color: {color}; font-size: 11px; font-weight: 600; background: transparent;")
+            cl.addWidget(s_lbl)
+
+            cards_row.addWidget(card, 1)
+        box.addLayout(cards_row)
+
+        # ── Chart row 1: Doanh thu theo giờ (2fr) | Phân loại xe (1fr) ─
+        charts_row1 = QHBoxLayout(); charts_row1.setSpacing(14)
+
+        # Left: Doanh thu theo giờ line chart
+        rev_panel = QFrame(); rev_panel.setObjectName("panel")
+        rev_lay = QVBoxLayout(rev_panel); rev_lay.setContentsMargins(18, 16, 18, 12); rev_lay.setSpacing(8)
+
+        rev_hdr = QHBoxLayout()
+        rev_title = label("📈 Doanh thu theo giờ", bold=True)
+        rev_title.setStyleSheet("font-size: 14px; color: #0f172a;")
+        rev_hdr.addWidget(rev_title); rev_hdr.addStretch()
+
+        # Cột / Đường toggle
+        toggle_box = QFrame(); toggle_box.setStyleSheet("background: #f1f5f9; border-radius: 6px; border: none;")
+        tg_lay = QHBoxLayout(toggle_box); tg_lay.setContentsMargins(2, 2, 2, 2); tg_lay.setSpacing(2)
+        btn_col = QPushButton("Cột"); btn_col.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_col.setStyleSheet("QPushButton { background: #64748b; color: white; border: none; border-radius: 4px; padding: 3px 10px; font-size: 11px; font-weight: 700; }")
+        btn_line = QPushButton("Đường"); btn_line.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_line.setStyleSheet("QPushButton { background: transparent; color: #64748b; border: none; padding: 3px 10px; font-size: 11px; font-weight: 600; }")
+        tg_lay.addWidget(btn_col); tg_lay.addWidget(btn_line)
+        rev_hdr.addWidget(toggle_box)
+        rev_lay.addLayout(rev_hdr)
+
+        # Inline grid chart (like dashboard, not QtCharts – avoids rendering issues)
+        rev_chart_frame = QFrame()
+        rev_chart_frame.setStyleSheet("background: white; border: none; border-radius: 6px;")
+        rev_chart_frame.setMinimumHeight(200)
+        rev_grid = QGridLayout(rev_chart_frame); rev_grid.setContentsMargins(4, 4, 4, 2); rev_grid.setSpacing(0)
+        rows_count = 6
+        for r, v in enumerate(range(rows_count, -1, -1)):
+            y_lbl = label(str(v))
+            y_lbl.setStyleSheet("color: #94a3b8; font-size: 9px;")
+            y_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            y_lbl.setFixedWidth(24)
+            rev_grid.addWidget(y_lbl, r, 0)
+            grid_line = QFrame(); grid_line.setFrameShape(QFrame.Shape.HLine)
+            grid_line.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
+            rev_grid.addWidget(grid_line, r, 1)
+            rev_grid.setRowStretch(r, 1)
+        hour_row = QHBoxLayout(); hour_row.setSpacing(0)
+        for h in range(24):
+            h_lbl = label(f"{h:02d}:00")
+            h_lbl.setStyleSheet("color: #94a3b8; font-size: 8px;")
+            h_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hour_row.addWidget(h_lbl, 1)
+        rev_grid.addLayout(hour_row, rows_count + 1, 1)
+        rev_grid.setColumnStretch(1, 1)
+        rev_lay.addWidget(rev_chart_frame, 1)
+        charts_row1.addWidget(rev_panel, 2)
+
+        # Right: Phân loại xe pie chart
+        pie_panel = QFrame(); pie_panel.setObjectName("panel")
+        pie_lay = QVBoxLayout(pie_panel); pie_lay.setContentsMargins(18, 16, 18, 12); pie_lay.setSpacing(8)
+        pie_title = label("🥧 Phân loại xe", bold=True)
+        pie_title.setStyleSheet("font-size: 14px; color: #0f172a;")
         pie_lay.addWidget(pie_title)
-        
-        pie_chart = QChart(); pie_chart.setMargins(QMargins(0,0,0,0)); pie_chart.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
+
+        pie_chart = QChart()
+        pie_chart.setMargins(QMargins(0, 0, 0, 0))
+        pie_chart.setBackgroundBrush(QBrush(Qt.BrushStyle.NoBrush))
+        pie_chart.legend().setAlignment(Qt.AlignmentFlag.AlignBottom)
+        pie_chart.legend().setFont(QFont("Segoe UI", 10))
+
         pseries = QPieSeries()
-        slice_xm = QPieSlice("Xe máy", 1); slice_xm.setColor(QColor("#f97316"))
+        slice_xm = QPieSlice("Xe máy", 1)
+        slice_xm.setColor(QColor("#f97316"))
+        slice_xm.setLabelVisible(False)
         pseries.append(slice_xm)
         pie_chart.addSeries(pseries)
-        
-        pie_view = QChartView(pie_chart); pie_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        pie_view = QChartView(pie_chart)
+        pie_view.setRenderHint(QPainter.RenderHint.Antialiasing)
         pie_view.setStyleSheet("border: none; background: transparent;")
-        pie_lay.addWidget(pie_view)
-        charts_layout.addWidget(pie_frame, 0, 2, 1, 1)
+        pie_view.setMinimumHeight(200)
+        pie_lay.addWidget(pie_view, 1)
+        charts_row1.addWidget(pie_panel, 1)
 
-        # 3. Lưu lượng xe theo giờ (Line Chart)
-        flow_frame = QFrame(); flow_frame.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
-        flow_lay = QVBoxLayout(flow_frame); flow_lay.setContentsMargins(16, 16, 16, 16)
-        flow_title = label("🌊 Lưu lượng xe theo giờ", bold=True); flow_title.setStyleSheet("color: #f97316; font-size: 14px; border: none;")
+        box.addLayout(charts_row1)
+
+        # ── Chart row 2: Lưu lượng xe (2fr) | Thanh toán (1fr) ─────────
+        charts_row2 = QHBoxLayout(); charts_row2.setSpacing(14)
+
+        # Left: Lưu lượng xe theo giờ — area chart using QtCharts
+        flow_panel = QFrame(); flow_panel.setObjectName("panel")
+        flow_lay = QVBoxLayout(flow_panel); flow_lay.setContentsMargins(18, 16, 18, 12); flow_lay.setSpacing(8)
+        flow_title = label("🌊 Lưu lượng xe theo giờ", bold=True)
+        flow_title.setStyleSheet("font-size: 14px; color: #0f172a;")
         flow_lay.addWidget(flow_title)
-        
-        flow_chart = QChart(); flow_chart.legend().hide(); flow_chart.setMargins(QMargins(0,0,0,0))
-        fseries = QLineSeries(); fseries.append(0, 0); fseries.append(2, 0); fseries.append(3, 1); fseries.append(4, 0); fseries.append(23, 0)
-        fpen = QPen(QColor("#3b82f6")); fpen.setWidth(2); fseries.setPen(fpen)
-        flow_chart.addSeries(fseries)
-        f_axis_x = QValueAxis(); f_axis_x.setRange(0, 23); f_axis_x.setTickCount(24)
-        f_axis_y = QValueAxis(); f_axis_y.setRange(0, 1); f_axis_y.setTickCount(6)
-        flow_chart.addAxis(f_axis_x, Qt.AlignmentFlag.AlignBottom); flow_chart.addAxis(f_axis_y, Qt.AlignmentFlag.AlignLeft)
-        fseries.attachAxis(f_axis_x); fseries.attachAxis(f_axis_y)
-        
-        flow_view = QChartView(flow_chart); flow_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        flow_view.setStyleSheet("border: none; background: transparent;")
-        flow_lay.addWidget(flow_view)
-        charts_layout.addWidget(flow_frame, 1, 0, 1, 2)
-        
-        # 4. Hình thức thanh toán
-        pay_frame = QFrame(); pay_frame.setStyleSheet("QFrame { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }")
-        pay_lay = QVBoxLayout(pay_frame); pay_lay.setContentsMargins(16, 16, 16, 16)
-        pay_title = label("💳 Hình thức thanh toán", bold=True); pay_title.setStyleSheet("color: #f97316; font-size: 14px; border: none;")
-        pay_lay.addWidget(pay_title)
-        
-        pay_row = QHBoxLayout()
-        pay_icon = label("💵"); pay_icon.setStyleSheet("background: #dcfce7; color: #16a34a; border-radius: 4px; padding: 4px;")
-        pay_row.addWidget(pay_icon)
-        pay_row.addWidget(label("Tiền mặt", bold=True))
-        pay_row.addStretch()
-        pay_val = QVBoxLayout(); pay_val.setSpacing(0)
-        val1 = label("0 đ", bold=True); val1.setAlignment(Qt.AlignmentFlag.AlignRight)
-        val2 = label("0%"); val2.setAlignment(Qt.AlignmentFlag.AlignRight); val2.setStyleSheet("color: #64748b; font-size: 10px;")
-        pay_val.addWidget(val1); pay_val.addWidget(val2)
-        pay_row.addLayout(pay_val)
-        pay_lay.addLayout(pay_row)
-        
-        # Progress bar mock
-        prog = QProgressBar(); prog.setValue(0); prog.setFixedHeight(8)
-        prog.setStyleSheet("QProgressBar { border: none; background: #e2e8f0; border-radius: 4px; } QProgressBar::chunk { background: #16a34a; border-radius: 4px; }")
-        prog.setTextVisible(False)
-        pay_lay.addWidget(prog)
-        pay_lay.addStretch()
-        
-        charts_layout.addWidget(pay_frame, 1, 2, 1, 1)
 
-        layout.addLayout(charts_layout)
+        flow_chart = QChart()
+        flow_chart.setMargins(QMargins(0, 0, 0, 0))
+        flow_chart.setBackgroundBrush(QBrush(Qt.BrushStyle.NoBrush))
+        flow_chart.legend().hide()
+
+        fseries = QLineSeries()
+        data_points = [(0,0),(1,0),(2,0),(3,1.2),(4,0.5),(5,0),(6,0),(7,0),(8,0),(9,0),
+                       (10,0),(11,0),(12,0),(13,0),(14,0),(15,0),(16,0),(17,0),(18,0),(19,0),
+                       (20,0),(21,0),(22,0),(23,0)]
+        for x, y in data_points:
+            fseries.append(x, y)
+        fpen = QPen(QColor("#3b82f6")); fpen.setWidth(2); fseries.setPen(fpen)
+
+        flow_area = QAreaSeries(fseries)
+        area_pen = QPen(QColor("#3b82f6")); area_pen.setWidth(2); flow_area.setPen(area_pen)
+        flow_area.setBrush(QBrush(QColor(59, 130, 246, 40)))
+
+        flow_chart.addSeries(flow_area)
+
+        f_ax_x = QValueAxis(); f_ax_x.setRange(0, 23); f_ax_x.setTickCount(13)
+        f_ax_x.setLabelFormat("%d:00"); f_ax_x.setLabelsFont(QFont("Segoe UI", 8))
+        f_ax_x.setGridLineColor(QColor("#f1f5f9")); f_ax_x.setLinePenColor(QColor("#e2e8f0"))
+
+        f_ax_y = QValueAxis(); f_ax_y.setRange(0, 2); f_ax_y.setTickCount(5)
+        f_ax_y.setLabelsFont(QFont("Segoe UI", 8))
+        f_ax_y.setGridLineColor(QColor("#f1f5f9")); f_ax_y.setLinePenColor(QColor("#e2e8f0"))
+
+        flow_chart.addAxis(f_ax_x, Qt.AlignmentFlag.AlignBottom)
+        flow_chart.addAxis(f_ax_y, Qt.AlignmentFlag.AlignLeft)
+        flow_area.attachAxis(f_ax_x); flow_area.attachAxis(f_ax_y)
+
+        flow_view = QChartView(flow_chart)
+        flow_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        flow_view.setStyleSheet("border: none; background: transparent;")
+        flow_view.setMinimumHeight(180)
+        flow_lay.addWidget(flow_view, 1)
+        charts_row2.addWidget(flow_panel, 2)
+
+        # Right: Hình thức thanh toán
+        pay_panel = QFrame(); pay_panel.setObjectName("panel")
+        pay_lay = QVBoxLayout(pay_panel); pay_lay.setContentsMargins(18, 16, 18, 16); pay_lay.setSpacing(12)
+        pay_title = label("💳 Hình thức thanh toán", bold=True)
+        pay_title.setStyleSheet("font-size: 14px; color: #0f172a;")
+        pay_lay.addWidget(pay_title)
+
+        def _payment_row(icon_text: str, icon_bg: str, icon_color: str, name: str, amount: str, pct: str, bar_color: str, bar_val: int) -> QVBoxLayout:
+            row_layout = QVBoxLayout(); row_layout.setSpacing(4)
+            top = QHBoxLayout()
+            icon_lbl = label(icon_text)
+            icon_lbl.setStyleSheet(f"background: {icon_bg}; color: {icon_color}; border-radius: 6px; padding: 4px 8px; font-size: 14px; border: none;")
+            icon_lbl.setFixedSize(34, 34)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            top.addWidget(icon_lbl)
+            name_lbl = label(name, bold=True)
+            name_lbl.setStyleSheet("font-size: 13px; color: #0f172a;")
+            top.addWidget(name_lbl)
+            top.addStretch()
+            val_col = QVBoxLayout(); val_col.setSpacing(0)
+            a_lbl = label(amount, bold=True); a_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+            a_lbl.setStyleSheet("font-size: 13px; color: #0f172a;")
+            p_lbl = label(pct); p_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+            p_lbl.setStyleSheet("font-size: 10px; color: #64748b;")
+            val_col.addWidget(a_lbl); val_col.addWidget(p_lbl)
+            top.addLayout(val_col)
+            row_layout.addLayout(top)
+            prog = QProgressBar(); prog.setValue(bar_val); prog.setFixedHeight(6); prog.setTextVisible(False)
+            prog.setStyleSheet(f"QProgressBar {{ border: none; background: #e2e8f0; border-radius: 3px; }} QProgressBar::chunk {{ background: {bar_color}; border-radius: 3px; }}")
+            row_layout.addWidget(prog)
+            return row_layout
+
+        pay_lay.addLayout(_payment_row("💵", "#dcfce7", "#16a34a", "Tiền mặt",     "0 đ", "0%",   "#16a34a", 0))
+
+        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
+        sep2.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
+        pay_lay.addWidget(sep2)
+
+        pay_lay.addLayout(_payment_row("💳", "#eff6ff", "#3b82f6", "Chuyển khoản", "0 đ", "0%",   "#3b82f6", 0))
+
+        sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.HLine)
+        sep3.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
+        pay_lay.addWidget(sep3)
+
+        pay_lay.addLayout(_payment_row("🏷", "#faf5ff", "#9333ea", "Thuê bao",      "0 đ", "0%",   "#9333ea", 0))
+
+        pay_lay.addStretch()
+        charts_row2.addWidget(pay_panel, 1)
+
+        box.addLayout(charts_row2)
+
         return page

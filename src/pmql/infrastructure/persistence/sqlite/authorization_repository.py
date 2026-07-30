@@ -11,16 +11,39 @@ from pmql.infrastructure.persistence.sqlite.models import PermissionModel, RoleM
 
 
 DEFAULT_PERMISSIONS = {
-    "lane.view": "Xem và cấu hình làn xe",
+    "lane.view": "Xem làn xe",
+    "lane.add": "Thêm làn xe",
+    "lane.edit": "Sửa làn xe",
+    "lane.delete": "Xóa làn xe",
     "lane.operate": "Ghi nhận xe vào/ra",
     "session.view": "Xem phiên gửi xe",
+    "shift.view": "Xem ca làm việc",
     "shift.manage": "Mở và đóng ca làm việc",
-    "subscriber.manage": "Quản lý thuê bao",
-    "card.manage": "Quản lý thẻ RFID",
-    "fee.manage": "Cấu hình biểu phí",
-    "alert.manage": "Xử lý cảnh báo",
+    "subscriber.view": "Xem danh sách thuê bao",
+    "subscriber.add": "Thêm thuê bao",
+    "subscriber.edit": "Sửa thuê bao",
+    "subscriber.delete": "Xóa thuê bao",
+    "card.view": "Xem danh sách thẻ",
+    "card.add": "Thêm thẻ RFID",
+    "card.edit": "Sửa thẻ RFID",
+    "card.delete": "Xóa thẻ RFID",
+    "fee.view": "Xem cấu hình biểu phí",
+    "fee.add": "Thêm biểu phí/loại xe",
+    "fee.edit": "Sửa biểu phí/loại xe",
+    "fee.delete": "Xóa biểu phí/loại xe",
+    "device.view": "Xem danh sách thiết bị",
+    "device.add": "Thêm thiết bị",
+    "device.edit": "Sửa thiết bị",
+    "device.delete": "Xóa thiết bị",
+    "alert.view": "Xem danh sách cảnh báo",
+    "alert.handle": "Xử lý cảnh báo",
     "report.view": "Xem báo cáo",
-    "user.manage": "Quản lý tài khoản và phân quyền",
+    "report.export": "Xuất báo cáo",
+    "user.view": "Xem danh sách tài khoản",
+    "user.add": "Thêm tài khoản",
+    "user.edit": "Sửa tài khoản",
+    "user.delete": "Xóa tài khoản",
+    "role.manage": "Quản lý vai trò & quyền",
 }
 
 
@@ -66,13 +89,29 @@ class SQLiteAuthorizationRepository:
         return output
 
     async def ensure_starter_roles(self) -> None:
-        """Seed editable starter roles only when a new database has none."""
-        if await self.list_roles():
-            return
+        """Seed editable starter roles, and ensure ADMIN always has all permissions."""
         all_codes = set(DEFAULT_PERMISSIONS)
-        await self.save_role("ADMIN", "Toàn quyền quản trị", all_codes)
-        await self.save_role("SUPERVISOR", "Giám sát vận hành", all_codes - {"user.manage"})
-        await self.save_role("OPERATOR", "Nhân viên vận hành làn", {"lane.view", "lane.operate", "session.view", "shift.manage"})
+        roles = await self.list_roles()
+        if not roles:
+            await self.save_role("ADMIN", "Toàn quyền quản trị", all_codes)
+            
+            supervisor_perms = all_codes - {
+                "user.add", "user.edit", "user.delete", "role.manage",
+                "device.delete", "fee.delete"
+            }
+            await self.save_role("SUPERVISOR", "Giám sát vận hành", supervisor_perms)
+            
+            operator_perms = {
+                "lane.view", "lane.operate", "session.view", 
+                "shift.view", "shift.manage", "alert.view", "alert.handle",
+                "subscriber.view", "card.view", "fee.view"
+            }
+            await self.save_role("OPERATOR", "Nhân viên vận hành làn", operator_perms)
+        else:
+            # Ensure ADMIN always has the complete set of permissions if it exists
+            admin_role = next((r for r in roles if r.name == "ADMIN"), None)
+            if admin_role and admin_role.permission_codes != all_codes:
+                await self.save_role("ADMIN", admin_role.description, all_codes)
 
     async def save_role(self, name: str, description: str, permission_codes: set[str]) -> RoleRecord:
         await self.ensure_permission_catalog()

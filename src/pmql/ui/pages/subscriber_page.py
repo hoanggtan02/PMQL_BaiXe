@@ -20,6 +20,7 @@ class SubscriberPageMixin:
         add_btn = QPushButton("+ Thêm thuê bao")
         add_btn.setObjectName("primary")
         add_btn.clicked.connect(self.add_subscriber)
+        if "subscriber.add" not in getattr(self, "permission_codes", set()): add_btn.setVisible(False)
         header_row.addWidget(add_btn)
         box.addLayout(header_row)
         box.addSpacing(8)
@@ -184,6 +185,8 @@ class SubscriberPageMixin:
             row_lay = QHBoxLayout(actions); row_lay.setContentsMargins(6, 4, 6, 4); row_lay.setSpacing(6); row_lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
             edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE)
             remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE)
+            if "subscriber.edit" not in getattr(self, "permission_codes", set()): edit.setVisible(False)
+            if "subscriber.delete" not in getattr(self, "permission_codes", set()): remove.setVisible(False)
             edit.clicked.connect(lambda _=False, subscriber=item, vlist=vehicles: self.subscriber_dialog(subscriber, vlist))
             remove.clicked.connect(lambda _=False, subscriber=item: self.delete_subscriber(subscriber))
             row_lay.addWidget(edit); row_lay.addWidget(remove)
@@ -304,6 +307,7 @@ class SubscriberPageMixin:
         cancel.clicked.connect(dialog.reject)
         
         save = icon_btn("fa5s.calendar-plus", "Gia hạn", "QPushButton { background: #10b981; color: white; border: none; border-radius: 6px; padding: 6px 16px; font-size: 13px; font-weight: bold; } QPushButton:hover { background: #059669; }")
+        if "subscriber.edit" not in getattr(self, "permission_codes", set()): save.setVisible(False)
         
         def do_renew():
             new_date_iso = renew_date_edit.date().toPython().isoformat()

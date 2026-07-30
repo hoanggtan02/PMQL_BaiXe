@@ -36,6 +36,7 @@ class LanePageMixin:
         add.setStyleSheet("background:#f97316; color:white; border:none; border-radius:6px; padding:8px 16px; font-weight:bold;")
         add.setCursor(Qt.CursorShape.PointingHandCursor)
         add.clicked.connect(self.add_lane)
+        if "lane.add" not in getattr(self, "permission_codes", set()): add.setVisible(False)
         header.addWidget(add); box.addLayout(header)
 
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -119,6 +120,8 @@ class LanePageMixin:
             db.setStyleSheet("QPushButton{background:white; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:6px 12px; font-weight:600; font-size:12px;} QPushButton:hover{background:#fef2f2;}")
             db.setCursor(Qt.CursorShape.PointingHandCursor)
             db.clicked.connect(lambda _=False, l=lane: self.delete_lane(l))
+            if "lane.edit" not in getattr(self, "permission_codes", set()): eb.setVisible(False)
+            if "lane.delete" not in getattr(self, "permission_codes", set()): db.setVisible(False)
             ar.addWidget(eb, 1); ar.addWidget(db); cb.addLayout(ar)
 
             self.lane_grid.addWidget(card, idx // 2, idx % 2)

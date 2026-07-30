@@ -8,7 +8,14 @@ from datetime import date, datetime, timedelta
 
 class UserPageMixin:
     def accounts_page(self) -> QWidget:
-            page, box = self.page(); header = QHBoxLayout(); h = label("Tài khoản & phân quyền", bold=True); h.setStyleSheet("font-size:24px;"); header.addWidget(h); header.addStretch(); roles = QPushButton("⚿ Vai trò & quyền"); roles.clicked.connect(self.manage_roles); header.addWidget(roles); create = QPushButton("+ Tạo tài khoản"); create.setObjectName("primary"); create.clicked.connect(self.create_account); header.addWidget(create); box.addLayout(header); self.user_table = self.make_table(["Tên đăng nhập", "Họ tên", "Vai trò", "Trạng thái", "Thao tác"]); box.addWidget(self.user_table, 1); self.load_users(); return page
+            page, box = self.page(); header = QHBoxLayout(); h = label("Tài khoản & phân quyền", bold=True); h.setStyleSheet("font-size:24px;"); header.addWidget(h); header.addStretch()
+            roles = QPushButton("⚿ Vai trò & quyền"); roles.clicked.connect(self.manage_roles)
+            if "role.manage" not in getattr(self, "permission_codes", set()): roles.setVisible(False)
+            header.addWidget(roles)
+            create = QPushButton("+ Tạo tài khoản"); create.setObjectName("primary"); create.clicked.connect(self.create_account)
+            if "user.add" not in getattr(self, "permission_codes", set()): create.setVisible(False)
+            header.addWidget(create)
+            box.addLayout(header); self.user_table = self.make_table(["Tên đăng nhập", "Họ tên", "Vai trò", "Trạng thái", "Thao tác"]); box.addWidget(self.user_table, 1); self.load_users(); return page
 
     def load_users(self) -> None:
             if not hasattr(self, "user_table"): return
@@ -19,6 +26,8 @@ class UserPageMixin:
                 for c, value in enumerate((user.username, user.full_name, user.role, "Hoạt động" if user.is_active else "Đã khóa")): self.user_table.setItem(r, c, QTableWidgetItem(value))
                 actions = QWidget(); actions.setMinimumHeight(38); action_row = QHBoxLayout(actions); action_row.setContentsMargins(4, 2, 4, 2)
                 edit, remove = QPushButton("✎ Sửa"), QPushButton("Xóa"); remove.setObjectName("danger")
+                if "user.edit" not in getattr(self, "permission_codes", set()): edit.setVisible(False)
+                if "user.delete" not in getattr(self, "permission_codes", set()): remove.setVisible(False)
                 edit.clicked.connect(lambda _=False, item=user: self.edit_account(item)); remove.clicked.connect(lambda _=False, item=user: self.delete_account(item))
                 action_row.addWidget(edit); action_row.addWidget(remove); self.user_table.setCellWidget(r, 4, actions)
 
