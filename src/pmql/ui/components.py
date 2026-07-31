@@ -171,6 +171,12 @@ def show_toast(parent, message: str, toast_type: str = "success"):
             if t_type == "success":
                 icon_lbl.setText("✓")
                 icon_lbl.setStyleSheet("color: white; background-color: #22c55e; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 6px;")
+            elif t_type == "info":
+                icon_lbl.setText("i")
+                icon_lbl.setStyleSheet("color: white; background-color: #3b82f6; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 10px;")
+            elif t_type == "warning":
+                icon_lbl.setText("!")
+                icon_lbl.setStyleSheet("color: white; background-color: #f59e0b; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 8px;")
             else:
                 icon_lbl.setText("!")
                 icon_lbl.setStyleSheet("color: white; background-color: #ef4444; border-radius: 12px; font-weight: bold; font-size: 15px; padding: 3px 8px;")
