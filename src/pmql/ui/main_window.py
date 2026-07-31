@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime, date, timedelta
 from pmql.ui.pages import *
 
-class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPageMixin, AlertPageMixin, ShiftPageMixin, SubscriberPageMixin, CardPageMixin, FeePageMixin, LanePageMixin, Vehicle_typePageMixin, UserPageMixin, SettingsPageMixin, DevicePageMixin, ReportPageMixin):
+class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPageMixin, AlertPageMixin, ShiftPageMixin, SubscriberPageMixin, CardPageMixin, FeePageMixin, LanePageMixin, Vehicle_typePageMixin, UserPageMixin, SettingsPageMixin, DevicePageMixin, ConnectionsPageMixin, ReportPageMixin):
     def __init__(self, user: object, settings) -> None:
             super().__init__()
             self.settings = settings; self.user = user; self.shift_id: str | None = None; self.nav: dict[str, QPushButton] = {}
@@ -17,7 +17,7 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             root = QWidget(); root.setObjectName("root"); layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
             layout.addWidget(self.build_sidebar()); right = QWidget(); right_layout = QVBoxLayout(right); right_layout.setContentsMargins(0, 0, 0, 0); right_layout.setSpacing(0)
             right_layout.addWidget(self.build_header()); self.stack = QStackedWidget(); right_layout.addWidget(self.stack); layout.addWidget(right, 1); self.setCentralWidget(root)
-            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": self.alert_page, "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "self.settings": self.settings_page, "hardware": self.hardware_page, "reports": self.reports_page}
+            self.page_factories = {"overview": self.overview_page, "operations": self.operations_page, "sessions": self.session_page, "shifts": self.shift_page, "subscribers": self.subscriber_page, "cards": self.card_page, "alerts": self.alert_page, "fees": self.fee_page, "lanes": self.lane_page, "vehicle_types": self.vehicle_type_page, "accounts": self.accounts_page, "self.settings": self.settings_page, "hardware": self.hardware_page, "connections": self.connections_page, "reports": self.reports_page}
             self.pages = {key: factory() for key, factory in self.page_factories.items()}
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: [self._apply_interaction_cursors(page) for page in self.pages.values()])
@@ -73,7 +73,6 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
                     ("subscribers", "fa5s.id-badge",       "  Thuê bao"),
                     ("cards",       "fa5s.credit-card",    "  Thẻ xe"),
                     ("fees",        "fa5s.tags",           "  Biểu phí"),
-                    ("lanes",       "fa5s.sliders-h",      "  Cấu hình làn"),
                     ("vehicle_types","fa5s.truck",         "  Loại xe"),
                 ]),
                 ("PHÂN TÍCH", [
@@ -81,13 +80,13 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
                 ]),
                 ("HỆ THỐNG", [
                     ("hardware",    "fa5s.microchip",      "  Phần cứng"),
-                    ("hardware",    "fa5s.plug",           "  Kết nối thiết bị"),
+                    ("connections", "fa5s.plug",           "  Kết nối thiết bị"),
                     ("lanes",       "fa5s.sliders-h",      "  Cấu hình làn"),
                     ("self.settings",    "fa5s.cog",            "  Cài đặt"),
                     ("accounts",    "fa5s.users",          "  Người dùng"),
                 ]),
             ]
-            required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.view", "shifts": "shift.view", "subscribers": "subscriber.view", "cards": "card.view", "fees": "fee.view", "lanes": "lane.view", "vehicle_types": "fee.view", "accounts": "user.view", "hardware": "device.view", "reports": "report.view"}
+            required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.view", "shifts": "shift.view", "subscribers": "subscriber.view", "cards": "card.view", "fees": "fee.view", "lanes": "lane.view", "vehicle_types": "fee.view", "accounts": "user.view", "hardware": "device.view", "connections": "device.view", "reports": "report.view"}
             import qtawesome as qta
             for group, links in groups:
                 if group:
@@ -183,9 +182,9 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             return bar
 
     def go(self, key: str) -> None:
-            if key not in {"overview", "operations", "hardware", "self.settings"}:
+            if key not in {"overview", "operations", "hardware", "connections", "self.settings"}:
                 self.reload_page(key, navigate=False)
-            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Kết nối & Cài đặt thiết bị thật", "reports": "Báo cáo & Thống kê"}[key])
+            self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Điều khiển phần cứng", "connections":"Kết nối & Cài đặt thiết bị thật", "reports": "Báo cáo & Thống kê"}[key])
             import qtawesome as qta
             for item_key, button in self.nav.items(): 
                 is_active = (item_key == key)

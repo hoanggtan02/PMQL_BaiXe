@@ -8,11 +8,10 @@ from datetime import date, datetime, timedelta
 
 # Direction display map
 _DIR_MAP = {
-    "IN":            ("↗ Xe vào",   "#dcfce7", "#16a34a"),
-    "OUT":           ("↙ Xe ra",    "#fee2e2", "#dc2626"),
-    "BIDIRECTIONAL": ("↔ Hai chiều","#e0e7ff", "#4f46e5"),
+    "IN":            ("Xe vào ↗",   "#dcfce7", "#16a34a"),
+    "OUT":           ("Xe ra ↙",    "#fee2e2", "#dc2626"),
+    "BIDIRECTIONAL": ("Hai chiều ↔","#e0e7ff", "#4f46e5"),
 }
-_DIR_LABEL = {"IN": "Xe vào ↗", "OUT": "Xe ra ↙", "BIDIRECTIONAL": "Hai chiều ↔"}
 
 # Status config: key → (text, badge_bg, badge_color, card_bg, card_border)
 _STAT = {
@@ -24,14 +23,62 @@ _STAT = {
 def _lane_status_key(lane) -> str:
     return "active" if lane.is_active else "inactive"
 
+class HoverShadowFilter(QObject):
+    def __init__(self, target, layout, parent=None):
+        super().__init__(parent)
+        self.target = target
+        self.layout = layout
+        
+        # Soft shadow, initially transparent
+        self.shadow = QGraphicsDropShadowEffect(self.target)
+        self.shadow.setBlurRadius(20)
+        self.shadow.setOffset(0, 8)
+        self.shadow.setColor(QColor(15, 23, 42, 0)) # transparent
+        self.target.setGraphicsEffect(self.shadow)
+        
+        self.anim = QPropertyAnimation(self.shadow, b"color", self)
+        self.anim.setDuration(120) # faster to avoid layout lag
+        
+        self.margin_anim = QVariantAnimation(self)
+        self.margin_anim.setDuration(120)
+        self.margin_anim.valueChanged.connect(self._update_margin)
+        
+    def _update_margin(self, val):
+        self.layout.setContentsMargins(8, val, 8, 22 - val) # 8+14 = 22 total vertical margin
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Enter:
+            self.anim.stop()
+            self.anim.setEndValue(QColor(15, 23, 42, 35)) # ~13% opacity slate
+            self.anim.start()
+            
+            self.margin_anim.stop()
+            self.margin_anim.setStartValue(self.layout.contentsMargins().top())
+            self.margin_anim.setEndValue(6) # lift up 2px smoothly
+            self.margin_anim.start()
+        elif event.type() == QEvent.Type.Leave:
+            self.anim.stop()
+            self.anim.setEndValue(QColor(15, 23, 42, 0))
+            self.anim.start()
+            
+            self.margin_anim.stop()
+            self.margin_anim.setStartValue(self.layout.contentsMargins().top())
+            self.margin_anim.setEndValue(8) # restore original 8px top margin
+            self.margin_anim.start()
+        return super().eventFilter(obj, event)
 
 class LanePageMixin:
     def lane_page(self) -> QWidget:
         page, box = self.page(); box.setContentsMargins(16, 16, 16, 16)
 
         header = QHBoxLayout()
-        self.lane_count_lbl = label("| 0 làn hoạt động", "muted")
+        history_btn = QPushButton("🕒 Lịch sử thay đổi")
+        history_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; color: #64748b; font-weight: 600;")
+        header.addWidget(history_btn)
+        
+        self.lane_count_lbl = label("0 làn đang cấu hình", "muted")
         header.addWidget(self.lane_count_lbl); header.addStretch()
+        
         add = QPushButton("+ Thêm làn xe"); add.setObjectName("primary")
         add.setStyleSheet("background:#f97316; color:white; border:none; border-radius:6px; padding:8px 16px; font-weight:bold;")
         add.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -59,72 +106,120 @@ class LanePageMixin:
         except Exception as e: show_toast(self, str(e), "error"); return
 
         active = sum(1 for l in lanes if l.is_active)
-        self.lane_count_lbl.setText(f"| {active}/{len(lanes)} làn hoạt động")
+        self.lane_count_lbl.setText(f"{len(lanes)} làn đang cấu hình")
 
         if not lanes:
             e = label("Chưa có làn nào — bấm '+ Thêm làn xe' để cấu hình", "muted")
             e.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.lane_grid.addWidget(e, 0, 0, 1, 2); return
+            self.lane_grid.addWidget(e, 0, 0, 1, 3); return
 
         for idx, lane in enumerate(lanes):
             sk = _lane_status_key(lane)
+            
+            wrapper = QWidget()
+            wl = QVBoxLayout(wrapper)
+            # Add padding around the card inside the wrapper to prevent shadow clipping
+            wl.setContentsMargins(8, 8, 8, 14) 
+            
             card = QFrame(); card.setObjectName("lnCard")
-            if sk == "active":
-                card.setStyleSheet("QFrame#lnCard{background:white; border:none; border-radius:8px;}")
-            elif sk == "inactive":
-                card.setStyleSheet("QFrame#lnCard{background:#fff5f5; border:1px solid #fecaca; border-radius:8px;}")
-            else:
-                card.setStyleSheet("QFrame#lnCard{background:#fffbeb; border:1px solid #fde68a; border-radius:8px;}")
+            base_style = "QFrame#lnCard { background: white; border: 1px solid #e2e8f0; border-radius: 8px; }"
+            if sk == "inactive":
+                base_style = "QFrame#lnCard { background: white; border: 1px solid #e2e8f0; border-radius: 8px; opacity: 0.8; }"
+            card.setStyleSheet(base_style)
+            
+            wl.addWidget(card)
+            
+            # Apply real smooth drop shadow on hover
+            shadow_filter = HoverShadowFilter(card, wl)
+            card.installEventFilter(shadow_filter)
+            # keep a reference so it's not garbage collected
+            if not hasattr(self, "_shadow_filters"): self._shadow_filters = []
+            self._shadow_filters.append(shadow_filter)
 
-            cb = QVBoxLayout(card); cb.setContentsMargins(20, 18, 20, 18); cb.setSpacing(10)
+            main_lay = QVBoxLayout(card); main_lay.setContentsMargins(20, 18, 20, 18); main_lay.setSpacing(6)
+            import qtawesome as qta
+            
+            def create_pill(txt, icon_name, bg_col, fg_col, border_col):
+                b = QPushButton(f" {txt}" if icon_name else txt)
+                if icon_name: b.setIcon(qta.icon(icon_name, color=fg_col))
+                b.setStyleSheet(f"QPushButton {{ background: {bg_col}; color: {fg_col}; border: 1px solid {border_col}; border-radius: 12px; padding: 3px 10px; font-size: 11px; font-weight: 600; text-align: center; }}")
+                b.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                b.setFixedHeight(24)
+                return b
 
             # Name + count
             top = QHBoxLayout()
+            left_hdr = QVBoxLayout(); left_hdr.setSpacing(6)
             nm_color = "#0f172a" if sk == "active" else ("#dc2626" if sk == "inactive" else "#d97706")
-            top.addWidget(label(lane.name, style=f"font-size:16px; font-weight:bold; color:{nm_color};"))
-            top.addStretch()
+            left_hdr.addWidget(label(lane.name, style=f"font-size:16px; font-weight:bold; color:{nm_color};"))
+            
+            tr = QHBoxLayout(); tr.setSpacing(6)
+            if lane.direction == "IN": tr.addWidget(create_pill("Xe vào ↗", None, "#dcfce7", "#16a34a", "#bbf7d0"))
+            elif lane.direction == "OUT": tr.addWidget(create_pill("↙ Xe ra", None, "#fee2e2", "#dc2626", "#fecaca"))
+            else: tr.addWidget(create_pill("↔ Hai chiều", None, "#e0e7ff", "#4f46e5", "#c7d2fe"))
+            
+            if sk == "active": tr.addWidget(create_pill("Hoạt động", "fa5s.check-circle", "#dcfce7", "#16a34a", "#bbf7d0"))
+            elif sk == "inactive": tr.addWidget(create_pill("Tắt", "fa5s.times-circle", "#f1f5f9", "#475569", "#e2e8f0"))
+            else: tr.addWidget(create_pill("Bảo trì", "fa5s.wrench", "#ffedd5", "#c2410c", "#fed7aa"))
+            tr.addStretch(); left_hdr.addLayout(tr)
+            
+            top.addLayout(left_hdr); top.addStretch()
+            
             vc = QVBoxLayout(); vc.setSpacing(0)
-            vc.addWidget(label("0", bold=True, style="color:#f59e0b; font-size:18px;"), alignment=Qt.AlignmentFlag.AlignHCenter)
-            vc.addWidget(label("Xe đang gửi", style="font-size:10px; color:#94a3b8;"), alignment=Qt.AlignmentFlag.AlignHCenter)
-            top.addLayout(vc); cb.addLayout(top)
-
-            # Tags
-            tr = QHBoxLayout(); tr.setSpacing(8)
-            dt, dbg, dc = _DIR_MAP.get(lane.direction, ("?", "#f1f5f9", "#64748b"))
-            tr.addWidget(label(dt, style=f"background:{dbg}; color:{dc}; border-radius:12px; padding:3px 10px; font-size:11px; font-weight:600;"))
-            st, sbg, sc = _STAT[sk]
-            tr.addWidget(label(st, style=f"background:{sbg}; color:{sc}; border-radius:12px; padding:3px 10px; font-size:11px; font-weight:600;"))
-            tr.addStretch(); cb.addLayout(tr)
+            vc.addWidget(label("0", bold=True, style="color:#f59e0b; font-size:18px;"), alignment=Qt.AlignmentFlag.AlignRight)
+            vc.addWidget(label("Xe đang gửi", style="font-size:10px; color:#94a3b8;"), alignment=Qt.AlignmentFlag.AlignRight)
+            top.addLayout(vc); main_lay.addLayout(top)
 
             # Devices
-            cb.addWidget(label("THIẾT BỊ LẮP ĐẶT", style="font-size:10px; font-weight:700; color:#94a3b8; letter-spacing:1px;"))
+            main_lay.addSpacing(8)
+            main_lay.addWidget(label("THIẾT BỊ LẮP ĐẶT", style="font-size:10px; font-weight:700; color:#94a3b8; letter-spacing:0.5px; text-transform: uppercase;"))
+            
             dr = QHBoxLayout(); dr.setSpacing(6)
-            ds = "background:#f0fdf4; color:#16a34a; border:none; border-radius:5px; padding:3px 8px; font-size:11px;"
-            nd = "background:#f1f5f9; color:#94a3b8; border:none; border-radius:5px; padding:3px 8px; font-size:11px;"
             has = False
-            if lane.rfid_device_id: dr.addWidget(label("💳 Thẻ RFID", style=ds)); has = True
-            if lane.camera_source: dr.addWidget(label("📷 Camera", style=ds)); has = True
-            if lane.barrier_device_id: dr.addWidget(label("🚧 Barrier", style=ds)); has = True
-            if not has: dr.addWidget(label("Chưa gắn thiết bị", style=nd))
-            dr.addStretch(); cb.addLayout(dr)
+            if lane.rfid_device_id: dr.addWidget(create_pill("Đầu đọc thẻ", "fa5s.id-badge", "#dcfce7", "#16a34a", "#bbf7d0")); has = True
+            if lane.camera_source: dr.addWidget(create_pill("Camera", "fa5s.camera", "#dcfce7", "#16a34a", "#bbf7d0")); has = True
+            if lane.barrier_device_id: dr.addWidget(create_pill("Barrier", "fa5s.bars", "#dcfce7", "#16a34a", "#bbf7d0")); has = True
+            if not has: 
+                nd = label("Chưa gắn thiết bị")
+                nd.setStyleSheet("color:#94a3b8; font-style: italic; font-size:11px;")
+                dr.addWidget(nd)
+            dr.addStretch(); main_lay.addLayout(dr)
+            
+            main_lay.addSpacing(4)
+            status_row = QHBoxLayout(); status_row.setSpacing(6)
+            status_row.addWidget(label("Trạng thái hoạt động:", style="font-size:12px; color:#64748b;"))
+            status_row.addWidget(label("Chờ xe", style="font-size:12px; font-weight:bold; color:#0f172a;"))
+            status_row.addStretch()
+            main_lay.addLayout(status_row)
 
             # Separator + actions
-            sp = QFrame(); sp.setFrameShape(QFrame.Shape.HLine); sp.setStyleSheet("border:none; border-top:1px solid #f1f5f9;")
-            cb.addWidget(sp)
+            main_lay.addSpacing(8)
+            sp = QFrame(); sp.setFrameShape(QFrame.Shape.HLine); sp.setStyleSheet("border:none; border-top:1px solid #e2e8f0;")
+            main_lay.addWidget(sp)
+            main_lay.addSpacing(4)
+            
             ar = QHBoxLayout(); ar.setSpacing(8)
-            eb = QPushButton("✏ Sửa cấu hình")
-            eb.setStyleSheet("QPushButton{background:white; border:1px solid #bfdbfe; color:#2563eb; border-radius:6px; padding:6px 12px; font-weight:600; font-size:12px;} QPushButton:hover{background:#eff6ff;}")
+            eb = QPushButton()
+            eb.setIcon(qta.icon("fa5s.edit", color="#3b82f6"))
+            eb.setText(" Sửa cấu hình")
+            eb.setStyleSheet("QPushButton{background:white; border:1px solid #bfdbfe; color:#3b82f6; border-radius:6px; padding:6px 12px; font-weight:600; font-size:12px;} QPushButton:hover{background:#eff6ff;}")
             eb.setCursor(Qt.CursorShape.PointingHandCursor)
             eb.clicked.connect(lambda _=False, l=lane: self.edit_lane(l))
-            db = QPushButton("✕ Xóa")
-            db.setStyleSheet("QPushButton{background:white; border:1px solid #fecaca; color:#dc2626; border-radius:6px; padding:6px 12px; font-weight:600; font-size:12px;} QPushButton:hover{background:#fef2f2;}")
+            
+            db = QPushButton()
+            db.setIcon(qta.icon("fa5s.trash-alt", color="#ef4444"))
+            db.setStyleSheet("QPushButton{background:white; border:1px solid #fecaca; color:#ef4444; border-radius:6px; padding:6px; font-weight:600; width: 32px; height: 30px;} QPushButton:hover{background:#fef2f2;}")
             db.setCursor(Qt.CursorShape.PointingHandCursor)
             db.clicked.connect(lambda _=False, l=lane: self.delete_lane(l))
+            
             if "lane.edit" not in getattr(self, "permission_codes", set()): eb.setVisible(False)
             if "lane.delete" not in getattr(self, "permission_codes", set()): db.setVisible(False)
-            ar.addWidget(eb, 1); ar.addWidget(db); cb.addLayout(ar)
+            
+            ar.addWidget(eb, 1); ar.addWidget(db, 0)
+            main_lay.addLayout(ar)
 
-            self.lane_grid.addWidget(card, idx // 2, idx % 2)
+            self.lane_grid.addWidget(wrapper, idx // 3, idx % 3)
 
     # ── Edit / Add Modal ─────────────────────────────────────────────
     def show_lane_modal(self, lane=None):

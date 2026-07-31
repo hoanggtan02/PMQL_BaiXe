@@ -4,276 +4,233 @@ from PySide6.QtGui import *
 from pmql.ui.components import *
 from pmql.ui.db_helpers import *
 import asyncio
-from datetime import date, datetime, timedelta
 
 class DevicePageMixin:
     def hardware_page(self) -> QWidget:
-            page, box = self.page()
-            title = label("Kết nối & Cài đặt thiết bị thật", bold=True)
-            title.setStyleSheet("font-size:24px;")
-            box.addWidget(title)
-    
-            # Device type definitions
-            DEVICE_TYPES = [
-                ("rfid",    "🪪",  "Đầu đọc thẻ",  "RFID / NFC",        "#3b82f6",
-                 [("TCP Socket","Kết nối IP trực tiếp"), ("Wiegand","Wiegand 26/34 bit"), ("RS485 Serial","USB-RS485 adapter")]),
-                ("camera",  "📷", "Camera ANPR",  "Nhận dạng biển số",  "#f59e0b",
-                 [("RTSP Stream","IP Camera qua mạng LAN"), ("HTTP API","SDK HTTP Dahua/Hikvision"), ("USB Camera","Camera USB/Webcam")]),
-                ("finger",  "👆", "Vân tay",       "Nhận dạng sinh trắc","#a855f7",
-                 [("SDK TCP","ZKTeco qua mạng"), ("RS485/UART","Module vân tay serial"), ("USB Module","Module USB vân tay")]),
-                ("barrier", "🚧", "Barrier",       "Barie tự động",       "#22c55e",
-                 [("RS485 Modbus","Barrier qua RS485"), ("RS232 Serial","Cổng serial COM"), ("Relay GPIO","Relay board / Arduino"), ("TCP IP","Barrier có IP")]),
-            ]
-    
-            import asyncio
-    
-            # ── Right panel ─────────────────────────────────────────────────
-            right_w = QWidget(); right_w.setFixedWidth(280)
-            right_col = QVBoxLayout(right_w); right_col.setContentsMargins(0,0,0,0); right_col.setSpacing(12)
-    
-            def section_box(icon, title_text, color):
-                f = QFrame(); f.setStyleSheet("QFrame { background: white; border: none; border-radius: 8px; }")
-                v = QVBoxLayout(f); v.setContentsMargins(14,12,14,12); v.setSpacing(6)
-                h = QHBoxLayout()
-                ico_lbl = label(icon); ico_lbl.setStyleSheet(f"background:{color}20;color:{color};border:none;border-radius:4px;padding:3px 7px;")
-                h.addWidget(ico_lbl); t = label(title_text, bold=True); t.setStyleSheet("border:none;"); h.addWidget(t); h.addStretch()
-                v.addLayout(h); return f, v
-    
-            sdk_f, sdk_v = section_box("📦", "SDK & Thư viện hỗ trợ", "#f97316")
-            for line in ["• SDK TCP (ZKTeco, Hikvision, Dahua)","• Thư viện: python-aiougent, evdev",""]:
-                l = label(line); l.setStyleSheet("color:#475569;font-size:11px;border:none;"); l.setWordWrap(True); sdk_v.addWidget(l)
-            for tag, items in [("📷 Camera ANPR", ["• RTSP stream → OpenCV → AI model","• HTTP API (Dahua, Hikvision SDK)","• ONVIF → RTSP capture"]),
-                                ("👆 Vân tay", ["• ZKTeco SDK (hỗ trợ Python)","• UART/RS485 → USB adapter","• FP template lưu trong DB"]),
-                                ("🚧 Barrier / Barie", ["• RS485 Modbus RTU","• RS232 Serial protocol","• Relay output (GPIO / USB relay)"])]:
-                h2 = label(tag, bold=True); h2.setStyleSheet("color:#1e293b;font-size:12px;border:none;margin-top:6px;"); sdk_v.addWidget(h2)
-                for it in items:
-                    l2 = label(it); l2.setStyleSheet("color:#475569;font-size:11px;border:none;"); sdk_v.addWidget(l2)
-            right_col.addWidget(sdk_f)
-    
-            # Connected devices panel
-            conn_f, conn_v = section_box("🔌", "Thiết bị đang kết nối", "#22c55e")
-            refresh_btn = QPushButton("⟳"); refresh_btn.setFixedSize(28,28)
-            refresh_btn.setStyleSheet("border:none;border-radius:14px;background:#f1f5f9;font-weight:bold;padding:0;")
-            conn_f.layout().itemAt(0).layout().addWidget(refresh_btn)
-    
-            devices_list_lbl = label("", "muted"); devices_list_lbl.setWordWrap(True)
-    
-            def refresh_devices():
-                try:
-                    devs = asyncio.run(_list_devices(self.settings))
-                    if devs:
-                        lines = []
-                        for d in devs:
-                            icon_map = {"rfid":"🪪","camera":"📷","finger":"👆","barrier":"🚧"}
-                            ico = icon_map.get(d.device_type, "📡")
-                            lines.append(f"{ico} {d.name}")
-                        devices_list_lbl.setText("\n".join(lines))
-                    else:
-                        devices_list_lbl.setText("Chưa có thiết bị nào kết nối\nHoặc kết nối TCP qua cổng 9001")
-                except: devices_list_lbl.setText("Chưa có thiết bị nào kết nối")
-    
-            refresh_devices()
-            refresh_btn.clicked.connect(refresh_devices)
-            conn_v.addWidget(devices_list_lbl)
-    
-            check_btn = QPushButton("⟳ Kiểm tra lại")
-            check_btn.setStyleSheet("background:white;border:1px solid #cbd5e1;border-radius:6px;padding:6px 14px;color:#475569;font-weight:600;")
-            check_btn.clicked.connect(refresh_devices)
-            conn_v.addWidget(check_btn)
-    
-            note = label("ℹ Chi hiển thị thiết bị đang kết nối TCP thực tế vào cổng 9001")
-            note.setStyleSheet("color:#94a3b8;font-size:11px;border:none;")
-            note.setWordWrap(True)
-            conn_v.addWidget(note)
-            right_col.addWidget(conn_f)
-            right_col.addStretch()
-    
-            # ── Left panel ──────────────────────────────────────────────────
-            left_w = QWidget()
-            left_col = QVBoxLayout(left_w); left_col.setContentsMargins(0,0,0,0); left_col.setSpacing(16)
-    
-            selected_type = [None]     # mutable ref
-            selected_proto = [None]
-            device_card_refs = {}
-            proto_btn_refs = []
-    
-            # Step section helper
-            def step_frame(num, title_text):
-                f = QFrame(); f.setStyleSheet("QFrame { background: white; border: none; border-radius: 8px; }")
-                v = QVBoxLayout(f); v.setContentsMargins(16,14,16,14); v.setSpacing(10)
-                h = QHBoxLayout(); h.setSpacing(10)
-                badge = label(str(num), bold=True)
-                badge.setFixedSize(28,28)
-                badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                badge.setStyleSheet("background:#f97316;color:white;border-radius:14px;border:none;font-size:13px;font-weight:700;")
-                h.addWidget(badge)
-                t = label(title_text, bold=True); t.setStyleSheet("font-size:14px;border:none;"); h.addWidget(t); h.addStretch()
-                v.addLayout(h)
-                return f, v
-    
-            # ── Step 1 — Chọn loại thiết bị ─────────────────────────────
-            s1_frame, s1_v = step_frame(1, "Chọn loại thiết bị cần kết nối")
-            card_row = QHBoxLayout(); card_row.setSpacing(12)
-    
-            proto_section_frame_ref = [None]
-            proto_label_ref = [None]
-            proto_btn_row_ref = [None]
-    
-            def make_device_card(key, icon, name, sub, color, protos):
-                card = QFrame()
-                card.setObjectName(f"devcard_{key}")
-                card.setFixedWidth(150); card.setFixedHeight(120)
-                card.setCursor(Qt.CursorShape.PointingHandCursor)
-                card.setStyleSheet("QFrame { background: white; border: none; border-radius: 10px; }")
-                v = QVBoxLayout(card); v.setContentsMargins(10,10,10,10); v.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    
-                ico_lbl = label(icon); ico_lbl.setStyleSheet(f"font-size:28px;border:none;background:{color}15;border-radius:8px;padding:6px 10px;")
-                ico_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                n_lbl = label(name, bold=True); n_lbl.setStyleSheet("border:none;font-size:12px;"); n_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                s_lbl = label(sub, "muted"); s_lbl.setStyleSheet("color:#94a3b8;font-size:11px;border:none;"); s_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                v.addWidget(ico_lbl); v.addWidget(n_lbl); v.addWidget(s_lbl)
-    
-                def on_click(_, k=key, c=color, ps=protos, nm=name):
-                    selected_type[0] = k; selected_proto[0] = None
-                    for ck, cf in device_card_refs.items():
-                        if ck == k:
-                            cf.setStyleSheet(f"QFrame {{ background: {c}10; border: none; border-radius: 10px; }}")
-                        else:
-                            cf.setStyleSheet("QFrame { background: white; border: none; border-radius: 10px; }")
-                    # Update protocol section
-                    if proto_label_ref[0]: proto_label_ref[0].setText(nm)
-                    if proto_btn_row_ref[0]:
-                        layout = proto_btn_row_ref[0]
-                        while layout.count(): layout.takeAt(0).widget().deleteLater() if layout.itemAt(0) and layout.itemAt(0).widget() else layout.takeAt(0)
-                        proto_btn_refs.clear()
-                        for p_name, p_sub in ps:
-                            pb = QPushButton(f"{p_name}\n{p_sub}")
-                            pb.setCheckable(True)
-                            pb.setStyleSheet("QPushButton{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 14px;font-size:12px;color:#475569;}"
-                                             "QPushButton:checked{background:#fff7ed;border:2px solid #f97316;color:#ea580c;font-weight:700;}")
-                            def on_proto(chk, pn=p_name, pb_ref=pb):
-                                selected_proto[0] = pn
-                                for rb in proto_btn_refs:
-                                    if rb is not pb_ref: rb.setChecked(False)
-                            pb.clicked.connect(on_proto)
-                            layout.addWidget(pb)
-                            proto_btn_refs.append(pb)
-                        layout.addStretch()
-    
-                class ClickFrame(type(card)):
-                    def mousePressEvent(self, ev): on_click(True)
-                card.__class__ = ClickFrame
-                device_card_refs[key] = card
-                return card
-    
-            for key, icon, name, sub, color, protos in DEVICE_TYPES:
-                card_row.addWidget(make_device_card(key, icon, name, sub, color, protos))
-            card_row.addStretch()
-            s1_v.addLayout(card_row)
-            left_col.addWidget(s1_frame)
-    
-            # ── Step 2 — Chọn giao thức ──────────────────────────────────
-            s2_frame, s2_v = step_frame(2, "Chọn giao thức kết nối")
-            s2_h = s2_frame.layout().itemAt(0).layout()
-            proto_lbl = label("—", "muted"); proto_lbl.setStyleSheet("color:#94a3b8;font-size:12px;border:none;")
-            s2_h.addWidget(proto_lbl); proto_label_ref[0] = proto_lbl
-    
-            note2 = label("Chọn giao thức phù hợp với thiết bị của bạn:"); note2.setStyleSheet("color:#64748b;font-size:12px;border:none;")
-            s2_v.addWidget(note2)
-            proto_row = QHBoxLayout(); proto_row.setSpacing(10)
-            proto_btn_row_ref[0] = proto_row
-            proto_row.addStretch()
-            s2_v.addLayout(proto_row)
-            left_col.addWidget(s2_frame)
-    
-            # ── Step 3 — Gán làn xe ──────────────────────────────────────
-            s3_frame, s3_v = step_frame(3, "Gán thiết bị vào làn xe")
-            s3_grid = QGridLayout(); s3_grid.setSpacing(16)
-    
-            s3_grid.addWidget(label("Chọn làn xe", "muted"), 0, 0)
-            lane_combo = QComboBox(); lane_combo.addItem("— Chọn làn —")
-            try:
-                for ln in asyncio.run(_lanes(self.settings)): lane_combo.addItem(ln.name, ln.id)
-            except: pass
-            s3_grid.addWidget(lane_combo, 1, 0)
-    
-            s3_grid.addWidget(label("Tên thiết bị (tùy chọn)", "muted"), 0, 1)
-            name_edit = QLineEdit(); name_edit.setPlaceholderText("VD: Camera làn 1 vào")
-            s3_grid.addWidget(name_edit, 1, 1)
-            s3_v.addLayout(s3_grid)
-            left_col.addWidget(s3_frame)
-    
-            # ── Step 4 — Test & Lưu ─────────────────────────────────────
-            s4_frame, s4_v = step_frame(4, "Kiểm tra kết nối và lưu cấu hình")
-            s4_h = QHBoxLayout(); s4_h.setSpacing(12)
-    
-            test_btn = QPushButton("⚡ Test kết nối")
-            test_btn.setStyleSheet("background:white;border:1px solid #3b82f6;color:#3b82f6;border-radius:6px;padding:8px 18px;font-weight:700;")
-            save_btn = QPushButton("💾 Lưu thiết bị")
-            save_btn.setStyleSheet("background:#f97316;color:white;border:none;border-radius:6px;padding:8px 18px;font-weight:700;")
-    
-            status_lbl = label(""); status_lbl.setStyleSheet("border:none;")
-    
-            def on_test():
-                if not selected_type[0]:
-                    show_toast(page, "Vui lòng chọn loại thiết bị trước.", "error"); return
-                if not selected_proto[0]:
-                    show_toast(page, "Vui lòng chọn giao thức kết nối.", "error"); return
-                status_lbl.setText("⏳ Đang kiểm tra..."); status_lbl.setStyleSheet("color:#f59e0b;border:none;")
-                # Simulate test result (mock)
-                status_lbl.setText("✅ Mô phỏng thành công (Mock mode)"); status_lbl.setStyleSheet("color:#16a34a;border:none;")
-    
-            def on_save():
-                if not selected_type[0]:
-                    show_toast(page, "Vui lòng chọn loại thiết bị.", "error"); return
-                if not selected_proto[0]:
-                    show_toast(page, "Vui lòng chọn giao thức kết nối.", "error"); return
-                lane_id = lane_combo.currentData() or ""
-                dev_name = name_edit.text().strip()
-                try:
-                    asyncio.run(_save_device(self.settings, selected_type[0], selected_proto[0], lane_id, dev_name))
-                    show_toast(page, f"Thiết bị đã được lưu thành công!", "success")
-                    refresh_devices()
-                except Exception as e:
-                    show_toast(page, str(e), "error")
-    
-            test_btn.clicked.connect(on_test)
-            save_btn.clicked.connect(on_save)
-            s4_h.addWidget(test_btn); s4_h.addWidget(save_btn); s4_h.addWidget(status_lbl); s4_h.addStretch()
-            s4_v.addLayout(s4_h)
-            left_col.addWidget(s4_frame)
-    
-            # ── Resources section ────────────────────────────────────────
-            res_f = QFrame(); res_f.setStyleSheet("QFrame { background: white; border: none; border-radius: 8px; }")
-            res_v = QVBoxLayout(res_f); res_v.setContentsMargins(16,14,16,14); res_v.setSpacing(12)
-            res_h0 = QHBoxLayout()
-            res_ico = label("📦"); res_ico.setStyleSheet("background:#f97316;color:white;border:none;border-radius:4px;padding:3px 7px;font-size:14px;")
-            res_h0.addWidget(res_ico); t2 = label("Tài nguyên & Driver mẫu", bold=True); t2.setStyleSheet("border:none;"); res_h0.addWidget(t2); res_h0.addStretch()
-            res_v.addLayout(res_h0)
-            cards_h = QHBoxLayout(); cards_h.setSpacing(12)
-            for icon, title_r, sub_r, color_r in [
-                ("🐍","Driver Python TCP","Tải liệu PDF - client TCP","#3b82f6"),
-                ("🔷","Arduino / ESP32","Tải liệu PDF - RFID TCP","#22c55e"),
-                ("🍓","Raspberry Pi","Tải liệu PDF - Pi + Camera","#ef4444"),
-                ("📄","Tài liệu giao thức","PDF - TCP Protocol full","#f97316"),
-            ]:
-                rc = QFrame(); rc.setStyleSheet("QFrame{background:#f8fafc;border-radius:8px;border:none;}")
-                rv = QVBoxLayout(rc); rv.setContentsMargins(12,12,12,12); rv.setSpacing(6)
-                ri = label(icon); ri.setStyleSheet(f"font-size:22px;background:{color_r}15;border-radius:6px;padding:4px 8px;border:none;"); ri.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                rv.addWidget(ri)
-                rv.addWidget(label(title_r, bold=True))
-                rv.addWidget(label(sub_r, "muted"))
-                rb = QPushButton("📥 Xuất PDF")
-                rb.setStyleSheet(f"background:{color_r};color:white;border:none;border-radius:4px;padding:5px;font-weight:600;font-size:11px;")
-                rv.addWidget(rb); cards_h.addWidget(rc)
-            res_v.addLayout(cards_h); left_col.addWidget(res_f)
-            left_col.addStretch()
-    
-            # ── Assemble main layout ─────────────────────────────────────
-            main_h = QHBoxLayout(); main_h.setSpacing(20)
-            scroll_w = QScrollArea(); scroll_w.setWidgetResizable(True); scroll_w.setFrameShape(QFrame.Shape.NoFrame)
-            scroll_w.setWidget(left_w); main_h.addWidget(scroll_w, 1); main_h.addWidget(right_w)
-            content_w = QWidget(); content_w.setLayout(main_h)
-            box.addWidget(content_w, 1)
-            return page
-
+        page, _ = self.page()
+        # Override the base layout to add scroll area properly
+        box = page.layout()
+        
+        title_h = QHBoxLayout()
+        import qtawesome as qta
+        icon_lbl = label("")
+        icon_lbl.setPixmap(qta.icon("fa5s.microchip", color="#f59e0b").pixmap(24, 24))
+        title_h.addWidget(icon_lbl)
+        t = label("Điều khiển phần cứng", bold=True)
+        t.setStyleSheet("font-size: 20px;")
+        title_h.addWidget(t)
+        title_h.addStretch()
+        box.addLayout(title_h)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("background: transparent;")
+        
+        content = QWidget()
+        c_box = QVBoxLayout(content)
+        c_box.setContentsMargins(0, 0, 0, 0)
+        c_box.setSpacing(16)
+        
+        # TCP Gateway Info
+        tcp = QFrame()
+        tcp.setStyleSheet("background: #cffafe; border: 1px solid #a5f3fc; border-radius: 6px;")
+        tcp_l = QHBoxLayout(tcp); tcp_l.setContentsMargins(12, 10, 12, 10)
+        info = label("<b>TCP Gateway:</b> Thiết bị thật kết nối vào <code style='background:white;padding:2px 4px;border-radius:4px;color:#0f172a'>host:9001</code> | Protocol: <code style='color:#be123c'>REGISTER {lane_id} DEVICE_TYPE</code> → <code style='color:#be123c'>EVENT {lane_id} {EVENT_TYPE} {json}</code> <a href='#' style='color:#0369a1;text-decoration:none'>Hướng dẫn</a>")
+        info.setTextFormat(Qt.TextFormat.RichText); info.setStyleSheet("color: #0369a1; font-size: 13px;")
+        info.setOpenExternalLinks(True)
+        ico = label("")
+        ico.setPixmap(qta.icon("fa5s.network-wired", color="#0369a1").pixmap(16, 16))
+        tcp_l.addWidget(ico); tcp_l.addWidget(info); tcp_l.addStretch()
+        c_box.addWidget(tcp)
+        
+        # Split Layout
+        split = QHBoxLayout(); split.setSpacing(16)
+        
+        # Left Panel (Trạng thái thiết bị)
+        left = QVBoxLayout(); left.setContentsMargins(0,0,0,0)
+        status_card = QFrame(); status_card.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+        status_l = QVBoxLayout(status_card); status_l.setContentsMargins(16, 12, 16, 12)
+        sh = QHBoxLayout()
+        sh_ico = label("")
+        sh_ico.setPixmap(qta.icon("fa5s.server", color="#f59e0b").pixmap(16, 16))
+        sh.addWidget(sh_ico)
+        sh.addWidget(label("Trạng thái thiết bị", bold=True))
+        sh.addStretch()
+        refresh = icon_btn("fa5s.redo", "", _BTN_PLAIN_STYLE)
+        refresh.setFixedSize(28, 28)
+        sh.addWidget(refresh)
+        status_l.addLayout(sh)
+        
+        self.dev_grid = QGridLayout(); self.dev_grid.setSpacing(12)
+        status_l.addLayout(self.dev_grid)
+        status_l.addStretch()
+        left.addWidget(status_card); left.addStretch()
+        
+        # Right Panel
+        right = QVBoxLayout(); right.setContentsMargins(0,0,0,0)
+        
+        # Điều khiển Barrier
+        bar_card = QFrame(); bar_card.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+        bar_l = QVBoxLayout(bar_card); bar_l.setContentsMargins(16, 12, 16, 12)
+        bh = QHBoxLayout()
+        bh_ico = label(""); bh_ico.setPixmap(qta.icon("fa5s.road", color="#f59e0b").pixmap(16, 16))
+        bh.addWidget(bh_ico); bh.addWidget(label("Điều khiển Barrier", bold=True)); bh.addStretch()
+        bar_l.addLayout(bh)
+        
+        self.bar_list = QVBoxLayout()
+        bar_l.addLayout(self.bar_list)
+        right.addWidget(bar_card)
+        
+        # Camera / ANPR
+        cam_card = QFrame(); cam_card.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 8px;")
+        cam_l = QVBoxLayout(cam_card); cam_l.setContentsMargins(16, 12, 16, 12)
+        ch = QHBoxLayout()
+        ch_ico = label(""); ch_ico.setPixmap(qta.icon("fa5s.camera", color="#f59e0b").pixmap(16, 16))
+        ch.addWidget(ch_ico); ch.addWidget(label("Camera / ANPR", bold=True)); ch.addStretch()
+        cam_l.addLayout(ch)
+        
+        self.cam_lane = QComboBox(); self.cam_lane.setFixedHeight(30)
+        cam_l.addWidget(self.cam_lane)
+        trig = icon_btn("fa5s.camera", "Kích hoạt chụp ảnh", _BTN_EDIT_STYLE)
+        trig.setStyleSheet("background: white; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 6px; padding: 6px;")
+        cam_l.addWidget(trig)
+        
+        upload_lbl = label("Upload ảnh để nhận dạng biển số", "muted")
+        upload_lbl.setStyleSheet("font-size: 11px;")
+        cam_l.addWidget(upload_lbl)
+        upload_btn = QPushButton("Choose File  No file chosen")
+        upload_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; color: #64748b; text-align: left;")
+        cam_l.addWidget(upload_btn)
+        right.addWidget(cam_card)
+        
+        split.addLayout(left, 2); split.addLayout(right, 1)
+        c_box.addLayout(split)
+        
+        # Simulation
+        sim_card = QFrame(); sim_card.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+        sim_l = QVBoxLayout(sim_card); sim_l.setContentsMargins(16, 12, 16, 12)
+        sim_h = QHBoxLayout()
+        sim_ico = label(""); sim_ico.setPixmap(qta.icon("fa5s.flask", color="#f59e0b").pixmap(16, 16))
+        sim_h.addWidget(sim_ico)
+        sim_h.addWidget(label("Mô phỏng thiết bị (Simulation)", bold=True))
+        sim_bdg = label("Không cần phần cứng thật", "badge")
+        sim_bdg.setStyleSheet("background: #0ea5e9; color: white; border-radius: 10px; padding: 4px 10px; font-size: 11px;")
+        sim_h.addStretch(); sim_h.addWidget(sim_bdg)
+        sim_l.addLayout(sim_h)
+        
+        sim_grid = QGridLayout(); sim_grid.setSpacing(12)
+        sim_grid.addWidget(label("Chọn làn", "muted"), 0, 0)
+        self.sim_lane = QComboBox(); self.sim_lane.setFixedHeight(30)
+        sim_grid.addWidget(self.sim_lane, 1, 0)
+        
+        sim_grid.addWidget(label("Mã thẻ RFID", "muted"), 0, 1)
+        self.sim_rfid = QLineEdit(); self.sim_rfid.setFixedHeight(30); self.sim_rfid.setPlaceholderText("VIS0001")
+        sim_grid.addWidget(self.sim_rfid, 1, 1)
+        
+        sim_grid.addWidget(label("Biển số", "muted"), 0, 2)
+        self.sim_plate = QLineEdit(); self.sim_plate.setFixedHeight(30); self.sim_plate.setPlaceholderText("51A-12345")
+        sim_grid.addWidget(self.sim_plate, 1, 2)
+        
+        sim_grid.addWidget(label("Chiều", "muted"), 0, 3)
+        self.sim_dir = QComboBox(); self.sim_dir.setFixedHeight(30); self.sim_dir.addItems(["Tự động", "Vào", "Ra"])
+        sim_grid.addWidget(self.sim_dir, 1, 3)
+        
+        sim_btn = icon_btn("fa5s.play", "Mô phỏng quẹt thẻ", _BTN_EDIT_STYLE)
+        sim_btn.setStyleSheet("background: #f59e0b; color: white; border: none; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
+        sim_btn.setFixedHeight(30)
+        sim_grid.addWidget(sim_btn, 1, 4)
+        sim_l.addLayout(sim_grid)
+        
+        sim_btns = QHBoxLayout()
+        car_in = icon_btn("fa5s.car", "Xe đến (loop detector)", _BTN_PLAIN_STYLE)
+        car_in.setStyleSheet("background: white; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 6px; padding: 6px 12px;")
+        car_out = icon_btn("fa5s.car-side", "Xe đã qua", _BTN_PLAIN_STYLE)
+        car_out.setStyleSheet("background: white; border: 1px solid #22c55e; color: #22c55e; border-radius: 6px; padding: 6px 12px;")
+        sim_btns.addWidget(car_in); sim_btns.addWidget(car_out); sim_btns.addStretch()
+        sim_l.addLayout(sim_btns)
+        c_box.addWidget(sim_card)
+        
+        # Event Log
+        log_card = QFrame(); log_card.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
+        log_l = QVBoxLayout(log_card); log_l.setContentsMargins(16, 12, 16, 12)
+        log_h = QHBoxLayout()
+        log_ico = label(""); log_ico.setPixmap(qta.icon("fa5s.terminal", color="#22c55e").pixmap(16, 16))
+        log_h.addWidget(log_ico); log_h.addWidget(label("Device event log", bold=True))
+        log_btn = QPushButton("Tải log")
+        log_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 12px;")
+        log_h.addStretch(); log_h.addWidget(log_btn)
+        log_l.addLayout(log_h)
+        
+        self.log_table = self.make_table(["#", "Loại", "Làn", "Dữ liệu", "Thời gian"])
+        self.log_table.setFixedHeight(200)
+        log_l.addWidget(self.log_table)
+        c_box.addWidget(log_card)
+        
+        scroll.setWidget(content)
+        box.addWidget(scroll, 1)
+        
+        self.load_hardware_ui()
+        refresh.clicked.connect(self.load_hardware_ui)
+        return page
+        
+    def load_hardware_ui(self):
+        try: lanes = asyncio.run(_lanes(self.settings))
+        except: return
+        
+        self.cam_lane.clear(); self.sim_lane.clear()
+        for l in lanes:
+            self.cam_lane.addItem(l.name, l.id)
+            self.sim_lane.addItem(l.name, l.id)
+            
+        while self.dev_grid.count():
+            item = self.dev_grid.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+            
+        import qtawesome as qta
+        for i, l in enumerate(lanes):
+            self.dev_grid.addWidget(label(l.name, bold=True), i, 0)
+            
+            open_bdg = label("Đóng", "badge")
+            open_bdg.setStyleSheet("background: #64748b; color: white; border-radius: 10px; padding: 2px 10px; font-size: 11px;")
+            self.dev_grid.addWidget(open_bdg, i, 1)
+            
+            st_bdg = label("Chờ xe", "badge")
+            st_bdg.setStyleSheet("background: #0ea5e9; color: white; border-radius: 10px; padding: 2px 10px; font-size: 11px;")
+            self.dev_grid.addWidget(st_bdg, i, 2)
+            
+            d_lay = QHBoxLayout(); d_lay.setSpacing(6); d_lay.setContentsMargins(0,0,0,0)
+            for icon_str, text in [("fa5s.id-card", "Đầu đọc thẻ"), ("fa5s.camera", "Camera"), ("fa5s.road", "Barrier"), ("fa5s.fingerprint", "Vân tay")]:
+                bdg = QFrame()
+                bdg.setStyleSheet("background: #22c55e; border-radius: 4px;")
+                bdg_l = QHBoxLayout(bdg); bdg_l.setContentsMargins(6, 2, 6, 2); bdg_l.setSpacing(4)
+                ico = label(""); ico.setPixmap(qta.icon(icon_str, color="white").pixmap(10, 10))
+                txt = label(text); txt.setStyleSheet("color: white; font-size: 10px; border: none;")
+                bdg_l.addWidget(ico); bdg_l.addWidget(txt)
+                d_lay.addWidget(bdg)
+            d_lay.addStretch()
+            w = QWidget(); w.setLayout(d_lay)
+            self.dev_grid.addWidget(w, i, 3)
+            
+        while self.bar_list.count():
+            item = self.bar_list.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+            
+        for l in lanes:
+            bf = QFrame(); bf.setStyleSheet("background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;")
+            bl = QHBoxLayout(bf); bl.setContentsMargins(12, 6, 12, 6)
+            ico = label(""); ico.setPixmap(qta.icon("fa5s.server", color="#64748b").pixmap(16, 16))
+            bl.addWidget(ico)
+            bl.addWidget(label(l.name, bold=True))
+            bl.addStretch()
+            mo = icon_btn("fa5s.door-open", "Mở", _BTN_PLAIN_STYLE)
+            mo.setStyleSheet("background: #22c55e; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-weight: bold; font-size: 12px;")
+            dong = icon_btn("fa5s.door-closed", "Đóng", _BTN_PLAIN_STYLE)
+            dong.setStyleSheet("background: #ef4444; color: white; border: none; border-radius: 4px; padding: 4px 10px; font-weight: bold; font-size: 12px;")
+            bl.addWidget(mo); bl.addWidget(dong)
+            self.bar_list.addWidget(bf)
+            
+        self.log_table.setRowCount(1)
+        item = QTableWidgetItem("Nhấn \"Tải log\" để xem")
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.log_table.setItem(0, 3, item)
