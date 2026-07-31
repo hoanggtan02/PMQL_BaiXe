@@ -411,8 +411,14 @@ class OperationsPageMixin:
         QTimer.singleShot(3000, lambda: self._set_barrier_state(lane_id, "CLOSED"))
 
     def manual_open(self, lane_id: str): 
-        show_toast(self, "Đã gửi lệnh MỞ barrier thủ công", "info")
+        txt, ok = QInputDialog.getText(self, "localhost:8000 says", "Lý do mở barrier thủ công")
+        if not ok: return
+        reason = txt.strip()
+        msg = f"MỞ barrier thủ công ({reason})" if reason else "MỞ barrier thủ công"
+        show_toast(self, msg, "success")
+        # TODO: Save manual open event to DB if needed
         self._trigger_barrier(lane_id)
+        
     def manual_close(self, lane_id: str): show_toast(self, "Đã gửi lệnh ĐÓNG barrier", "info")
     def trigger_camera(self, lane_id: str): show_toast(self, "Đã gửi lệnh kích hoạt CAMERA", "info")
 
@@ -472,8 +478,9 @@ class OperationsPageMixin:
                 if len(self.overview_sub_labels) >= 4:
                     cap = 60
                     pct = int(active_cnt / cap * 100) if cap else 0
-                    self.overview_sub_labels[0].setText(f"{pct}% công suất ({cap} chỗ giới hạn chỗ)")
-                    self.overview_sub_labels[1].setText(f"Ra: {today_cnt}")
+                    self.overview_sub_labels[0].setText(f"{pct}% công suất (Không giới hạn chỗ)")
+                    self.overview_sub_labels[1].setText(f"Ra: {stats.get('today_count', 0)}")
+                    self.overview_sub_labels[2].setText(f"Tháng: {stats.get('revenue_month', 0):,} đ")
                 if hasattr(self, 'overview_progress'):
                     self.overview_progress.setValue(min(active_cnt, 60))
                 # Populate active vehicles table
@@ -481,19 +488,29 @@ class OperationsPageMixin:
                 sessions_detail = stats.get("sessions_detail", [])
                 self.live_table.setRowCount(len(sessions_detail) if sessions_detail else len(plates))
                 if sessions_detail:
+                    from PySide6.QtGui import QColor, QFont
+                    bold_font = QFont(); bold_font.setBold(True)
                     for r, sess in enumerate(sessions_detail):
                         plate_item = QTableWidgetItem(sess.get("plate", "RFID"))
                         plate_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                        plate_item.setFont(bold_font)
+                        plate_item.setForeground(QColor("#854d0e")) # Dark yellow/brown text
+                        plate_item.setBackground(QColor("#fef08a")) # Yellow background
                         vtype_item = QTableWidgetItem("🏍 " + sess.get("vehicle_type", "—"))
+                        vtype_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         entry_item = QTableWidgetItem(sess.get("entry_time", "—"))
                         entry_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         duration_item = QTableWidgetItem(sess.get("duration", "—"))
-                        duration_item.setForeground(__import__('PySide6.QtGui', fromlist=['QColor']).QColor("#2563eb"))
+                        duration_item.setForeground(QColor("#1d4ed8"))
+                        duration_item.setBackground(QColor("#dbeafe"))
                         duration_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        type_item = QTableWidgetItem("Thuê bao" if sess.get("subscriber_id") else "Vãng lai")
-                        type_item.setForeground(__import__('PySide6.QtGui', fromlist=['QColor']).QColor("#2563eb" if sess.get("subscriber_id") else "#16a34a"))
+                        duration_item.setFont(bold_font)
+                        is_sub = bool(sess.get("subscriber_id"))
+                        type_item = QTableWidgetItem("Thuê bao" if is_sub else "Vãng lai")
+                        type_item.setForeground(QColor("#2563eb" if is_sub else "#16a34a"))
                         type_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                        lane_item = QTableWidgetItem("—")
+                        type_item.setFont(bold_font)
+                        lane_item = QTableWidgetItem(sess.get("lane", "—"))
                         lane_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
                         self.live_table.setItem(r, 0, plate_item)
                         self.live_table.setItem(r, 1, vtype_item)
@@ -515,7 +532,20 @@ class OperationsPageMixin:
                     self.overview_stat_lbls[0].setText(str(sub_cnt))
                     self.overview_stat_lbls[1].setText(str(guest_cnt))
                     self.overview_stat_lbls[2].setText(f"{lane_active} / {lane_total}")
-                    self.overview_stat_lbls[3].setText(f"0 / 0")
+                    self.overview_stat_lbls[3].setText(f"{lane_total * 4} / {lane_total * 4}")
+
+                # Update Lane panel items
+                if hasattr(self, "overview_lane_rows"):
+                    lane_counts = stats.get("lane_counts", {})
+                    for lane_id, lbl, badge in self.overview_lane_rows:
+                        cnt = lane_counts.get(lane_id, 0)
+                        lbl.setText(f"{cnt} xe • 4 thiết bị")
+                        if cnt > 0:
+                            badge.setText("Đang chạy")
+                            badge.setStyleSheet("background: #dcfce7; color: #16a34a; border-radius: 4px; padding: 3px 6px; font-size: 10px; font-weight: bold;")
+                        else:
+                            badge.setText("Chờ xe")
+                            badge.setStyleSheet("background: #64748b; color: white; border-radius: 4px; padding: 3px 6px; font-size: 10px; font-weight: bold;")
 
     def fill_vehicle_combo(self, combo: QComboBox) -> None:
             """Use configured vehicle types everywhere; display names stay user-friendly."""

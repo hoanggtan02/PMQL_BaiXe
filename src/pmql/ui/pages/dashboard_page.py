@@ -15,10 +15,10 @@ class DashboardPageMixin:
             # ── Metric cards row ──────────────────────────────────────
             cards_row = QHBoxLayout(); cards_row.setSpacing(12)
             metric_defs = [
-                ("Xe đang trong bãi", "2", "0% công suất (60 chỗ giới hạn chỗ)", "🚙", "#2563eb"),
-                ("Lượt vào hôm nay", "0", "Ra: 0", "↪", "#16a34a"),
-                ("Doanh thu hôm nay", "0 đ", "Tháng: 0 đ", "💵", "#ea580c"),
-                ("Cảnh báo chờ xử lý", "0", "Xem và xử lý →", "⚠", "#dc2626"),
+                ("Xe đang trong bãi", "2", "0% công suất (60 chỗ giới hạn chỗ)", "🚙", "#2f66d0"),
+                ("Lượt vào hôm nay", "0", "Ra: 0", "↪", "#159947"),
+                ("Doanh thu hôm nay", "0 đ", "Tháng: 0 đ", "💵", "#f06d1c"),
+                ("Cảnh báo chờ xử lý", "0", "Xem và xử lý →", "⚠", "#cf3436"),
             ]
             self.overview_values = []
             self.overview_sub_labels = []
@@ -63,13 +63,14 @@ class DashboardPageMixin:
             lane_title_lbl = label("🚦 Trạng thái làn xe", bold=True)
             lane_title_lbl.setStyleSheet("font-size: 14px;")
             lane_header.addWidget(lane_title_lbl); lane_header.addStretch()
-            refresh_icon = icon_btn("fa5s.sync-alt", "", _BTN_PLAIN_STYLE, 14)
-            refresh_icon.setFixedSize(30, 30)
+            refresh_icon = QPushButton(" ↻ ")
+            refresh_icon.setStyleSheet("background: white; color: #64748b; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-weight: bold; font-size: 14px;")
             refresh_icon.clicked.connect(self.refresh_live)
+            
             operate_btn = QPushButton("Vận hành")
-            operate_btn.setObjectName("primary")
-            operate_btn.setStyleSheet("QPushButton { padding: 6px 16px; font-weight: 700; }")
+            operate_btn.setStyleSheet("background: #f06d1c; color: white; border: none; border-radius: 6px; padding: 6px 12px; font-weight: bold;")
             operate_btn.clicked.connect(lambda: self.go("operations"))
+            
             lane_header.addWidget(refresh_icon); lane_header.addWidget(operate_btn)
             lane_layout.addLayout(lane_header)
     
@@ -90,19 +91,19 @@ class DashboardPageMixin:
                 info_col = QVBoxLayout(); info_col.setSpacing(1)
                 name_lbl = label(lane.name, bold=True)
                 name_lbl.setStyleSheet("font-size: 13px;")
-                sub_lbl2 = label("0 xe • 4 thiết bị")
+                sub_lbl2 = label("0 xe - 4 thiết bị")
                 sub_lbl2.setStyleSheet("color: #64748b; font-size: 11px;")
                 info_col.addWidget(name_lbl); info_col.addWidget(sub_lbl2)
                 row_lay.addLayout(info_col, 1)
                 status_badge = label("Chờ xe", "badge")
-                status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; border-radius: 10px; padding: 3px 10px; font-size: 11px;")
+                status_badge.setStyleSheet("background: #64748b; color: white; border-radius: 4px; padding: 3px 6px; font-size: 10px; font-weight: bold;")
                 row_lay.addWidget(status_badge)
                 lane_layout.addWidget(row_w)
+                self.overview_lane_rows.append((lane.id, sub_lbl2, status_badge))
                 if lane != lanes_data[-1]:
                     sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
                     sep.setStyleSheet("border: none; border-top: 1px solid #f1f5f9;")
                     lane_layout.addWidget(sep)
-                self.overview_lane_rows.append((sub_lbl2, status_badge))
             if not lanes_data:
                 lane_layout.addWidget(label("Chưa có làn hoạt động.", "muted"))
             lane_layout.addStretch()

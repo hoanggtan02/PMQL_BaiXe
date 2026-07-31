@@ -150,17 +150,35 @@ async def _stats(settings: Settings, shift_id: str | None) -> dict[str, object]:
         async with db.session() as session:
             sessions = await SQLiteSessionRepository(session).list_recent(settings.branch_id, 500)
             users = await SQLiteUserRepository(session).list_all()
-            lanes = await SQLiteLaneRepository(session).list_active(settings.branch_id)
-        active = [s for s in sessions if s.status == "ACTIVE"]
-        from sqlalchemy import text
-        v_res = await session.execute(text("SELECT id, vehicle_type FROM vehicles"))
-        v_id_map = {r.id: r.vehicle_type for r in v_res.mappings()}
-        for s in active:
-            if s.vehicle_id and s.vehicle_id in v_id_map:
-                s.vehicle_type = v_id_map[s.vehicle_id]
-        
-        today = date.today()
-        closed = [s for s in sessions if s.exit_time and s.exit_time.date() == today]
+            lanes = await SQLiteLaneRepository(session).list_active()
+            active = [s for s in sessions if s.status == "ACTIVE"]
+            from sqlalchemy import text
+            v_res = await session.execute(text("SELECT id, vehicle_type FROM vehicles"))
+            v_id_map = {r.id: r.vehicle_type for r in v_res.mappings()}
+            for s in active:
+                if s.vehicle_id and s.vehicle_id in v_id_map:
+                    s.vehicle_type = v_id_map[s.vehicle_id]
+            
+            today = date.today()
+            this_month = today.replace(day=1)
+            closed_today = [s for s in sessions if s.exit_time and s.exit_time.date() == today]
+            closed_month = [s for s in sessions if s.exit_time and s.exit_time.date() >= this_month]
+            
+            # Sub count
+            sub_count = len([s for s in active if s.subscriber_id is not None])
+            
+            # Lane mapping for UI
+            lane_map = {lane.id: lane.name for lane in lanes}
+            
+            # Active counts per lane
+            lane_active_counts = {lane.id: 0 for lane in lanes}
+            for s in sessions:
+                if s.entry_time and s.entry_time.date() == today and s.lane_in_id:
+                    if s.lane_in_id in lane_active_counts:
+                        lane_active_counts[s.lane_in_id] += 1
+                if s.exit_time and s.exit_time.date() == today and s.lane_out_id:
+                    if s.lane_out_id in lane_active_counts:
+                        lane_active_counts[s.lane_out_id] += 1
         # Build sessions_detail for live table
         now = datetime.now()
         def fmt_duration(entry_time):
@@ -176,17 +194,20 @@ async def _stats(settings: Settings, shift_id: str | None) -> dict[str, object]:
                 "entry_time": s.entry_time.strftime("%H:%M:%S %d/%m/%Y"),
                 "duration": fmt_duration(s.entry_time),
                 "subscriber_id": s.subscriber_id,
+                "lane": lane_map.get(s.lane_in_id, "---"),
             })
         return {
             "active": len(active),
             "plates": [s.plate_number for s in active if s.plate_number],
             "sessions_detail": sessions_detail,
             "today_count": len([s for s in sessions if s.entry_time.date() == today]),
-            "revenue": sum(s.fee_amount for s in closed),
+            "revenue": sum(s.fee_amount for s in closed_today),
+            "revenue_month": sum(s.fee_amount for s in closed_month),
             "users": len([u for u in users if u.is_active]),
-            "subscriber_count": 0,
+            "subscriber_count": sub_count,
             "lane_total": len(lanes),
             "lane_active": len(lanes),
+            "lane_counts": lane_active_counts,
             "alerts": 0,
         }
     finally: await db.dispose()
