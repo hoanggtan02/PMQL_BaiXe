@@ -60,9 +60,11 @@ class OperationsPageMixin:
                     idx += 1
         lane_filter.currentTextChanged.connect(do_filter)
         
-        refresh_btn = QPushButton("↻")
+        refresh_btn = QPushButton()
+        import qtawesome as qta
+        refresh_btn.setIcon(qta.icon("fa5s.sync-alt", color="#64748b"))
         refresh_btn.setFixedSize(32, 32)
-        refresh_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; border-radius: 6px; color: #64748b; font-weight: bold; font-size: 16px;")
+        refresh_btn.setStyleSheet("background: white; border: 1px solid #cbd5e1; border-radius: 8px;")
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         controls_bar.addWidget(refresh_btn)
         box.addLayout(controls_bar)
@@ -235,13 +237,16 @@ class OperationsPageMixin:
         return page
 
     def setup_shift_ui(self):
+        import qtawesome as qta
         if hasattr(self, 'shift_id') and self.shift_id:
-            self.shift_button.setText("⏹ Đóng ca")
-            self.shift_button.setStyleSheet("background: #ef4444; color: white; border-radius: 6px; padding: 6px 16px; font-weight: bold;")
+            self.shift_button.setIcon(qta.icon("fa5s.stop", color="white"))
+            self.shift_button.setText(" Đóng ca")
+            self.shift_button.setStyleSheet("background: #ef4444; color: white; border-radius: 8px; padding: 6px 16px; font-weight: bold; font-size: 13px;")
             self.shift_status_badge.setText("Ca đang hoạt động"); self.shift_status_badge.setStyleSheet("background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 11px;")
         else:
-            self.shift_button.setText("▶ Mở ca")
-            self.shift_button.setStyleSheet("background: #22c55e; color: white; border-radius: 6px; padding: 6px 16px; font-weight: bold;")
+            self.shift_button.setIcon(qta.icon("fa5s.play", color="white"))
+            self.shift_button.setText(" Mở ca")
+            self.shift_button.setStyleSheet("background: #22c55e; color: white; border-radius: 8px; padding: 6px 16px; font-weight: bold; font-size: 13px;")
             self.shift_status_badge.setText("Chưa mở ca"); self.shift_status_badge.setStyleSheet("background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 4px 12px; border-radius: 6px; font-weight: bold; font-size: 11px;")
 
     def open_shift(self) -> None:
@@ -411,7 +416,7 @@ class OperationsPageMixin:
         QTimer.singleShot(3000, lambda: self._set_barrier_state(lane_id, "CLOSED"))
 
     def manual_open(self, lane_id: str): 
-        txt, ok = QInputDialog.getText(self, "localhost:8000 says", "Lý do mở barrier thủ công")
+        txt, ok = QInputDialog.getText(self, "PMQL Bãi Xe", "Lý do mở barrier thủ công:")
         if not ok: return
         reason = txt.strip()
         msg = f"MỞ barrier thủ công ({reason})" if reason else "MỞ barrier thủ công"
@@ -550,9 +555,18 @@ class OperationsPageMixin:
     def fill_vehicle_combo(self, combo: QComboBox) -> None:
             """Use configured vehicle types everywhere; display names stay user-friendly."""
             combo.clear()
+            import qtawesome as qta
             try:
-                for item in asyncio.run(_vehicle_types(self.settings)):
-                    combo.addItem(item.display_name, item.code)
+                items = asyncio.run(_vehicle_types(self.settings))
+                items = sorted(items, key=lambda i: (1 if "khac" in i.code.lower() or "other" in i.code.lower() else 0, i.display_name))
+                for item in items:
+                    c = item.code.lower()
+                    icon_code = "fa5s.car"
+                    if "xe_may" in c or "motor" in c: icon_code = "fa5s.motorcycle"
+                    elif "xe_dap" in c or "bike" in c: icon_code = "fa5s.bicycle"
+                    elif "xe_tai" in c or "truck" in c: icon_code = "fa5s.truck"
+                    elif "khac" in c or "other" in c: icon_code = "fa5s.ellipsis-h"
+                    combo.addItem(qta.icon(icon_code, color="#475569"), "  " + item.display_name, item.code)
             except Exception as exc:
                 show_toast(self, str(exc), "error")
 

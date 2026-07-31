@@ -114,7 +114,9 @@ class ShiftPageMixin:
     
             history_tab = QWidget(); history_layout = QVBoxLayout(history_tab); history_layout.setContentsMargins(0, 20, 0, 0)
             search = QLineEdit(); search.setPlaceholderText("Tìm kiếm trong danh sách…"); history_layout.addWidget(search)
-            self.shift_table = self.make_table(["Mã ca", "Nhân viên", "Loại ca", "Làn", "Tiền đầu ca", "Doanh thu", "Bắt đầu", "Kết thúc", "Trạng thái", "Thao tác"]); history_layout.addWidget(self.shift_table, 1)
+            self.shift_table = self.make_table(["Mã ca", "Nhân viên", "Loại ca", "Làn", "Tiền đầu ca", "Doanh thu", "Bắt đầu", "Kết thúc", "Trạng thái", "Thao tác"])
+            self.shift_table.verticalHeader().setDefaultSectionSize(64)
+            history_layout.addWidget(self.shift_table, 1)
             search.textChanged.connect(lambda query: [self.shift_table.setRowHidden(r, bool(query) and query.lower() not in " ".join(self.shift_table.item(r,c).text().lower() for c in range(self.shift_table.columnCount()) if self.shift_table.item(r,c))) for r in range(self.shift_table.rowCount())])
             tabs.addTab(history_tab, "🕒 Lịch sử ca")
     
@@ -132,8 +134,12 @@ class ShiftPageMixin:
                     f"{s.opening_cash:,} đ", f"{s.total_revenue:,} đ",
                     s.start_time.strftime("%d/%m %H:%M"), s.end_time.strftime("%d/%m %H:%M") if s.end_time else "—", s.status
                 ]
-                for c, value in enumerate(row_data): self.shift_table.setItem(r, c, QTableWidgetItem(str(value)))
-                actions = QWidget(); actions.setMinimumHeight(38); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2)
+                for c, value in enumerate(row_data):
+                    item = QTableWidgetItem(str(value))
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                    self.shift_table.setItem(r, c, item)
+                actions = QWidget(); actions_row = QHBoxLayout(actions); actions_row.setContentsMargins(4, 2, 4, 2); actions_row.setSpacing(4)
+                actions_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 edit = icon_btn("fa5s.edit", "Sửa", _BTN_EDIT_STYLE); edit.clicked.connect(lambda _=False, item=s: self.edit_shift(item)); actions_row.addWidget(edit)
                 remove = icon_btn("fa5s.trash-alt", "Xóa", _BTN_DEL_STYLE); remove.clicked.connect(lambda _=False, item=s: self.delete_shift(item)); actions_row.addWidget(remove)
                 self.shift_table.setCellWidget(r, 9, actions)

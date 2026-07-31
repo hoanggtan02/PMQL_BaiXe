@@ -63,37 +63,43 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
     
             groups = [
                 ("", [
-                    ("overview",    "▦  Tổng quan"),
-                    ("operations",  "➡  Vận hành làn"),
-                    ("sessions",    "◌  Phiên gửi xe"),
-                    ("alerts",      "⚠  Cảnh báo"),
-                    ("shifts",      "◴  Ca làm việc"),
+                    ("overview",    "fa5s.tachometer-alt", "  Tổng quan"),
+                    ("operations",  "fa5s.road",           "  Vận hành làn"),
+                    ("sessions",    "fa5s.car",            "  Phiên gửi xe"),
+                    ("alerts",      "fa5s.exclamation-triangle", "  Cảnh báo"),
+                    ("shifts",      "fa5s.history",        "  Ca làm việc"),
                 ]),
                 ("QUẢN LÝ", [
-                    ("subscribers", "▣  Thuê bao"),
-                    ("cards",       "▤  Thẻ xe"),
-                    ("fees",        "◆  Biểu phí"),
-                    ("lanes",       "⚙  Cấu hình làn"),
-                    ("vehicle_types","▧  Loại xe"),
+                    ("subscribers", "fa5s.id-badge",       "  Thuê bao"),
+                    ("cards",       "fa5s.credit-card",    "  Thẻ xe"),
+                    ("fees",        "fa5s.tags",           "  Biểu phí"),
+                    ("lanes",       "fa5s.sliders-h",      "  Cấu hình làn"),
+                    ("vehicle_types","fa5s.truck",         "  Loại xe"),
                 ]),
                 ("PHÂN TÍCH", [
-                    ("reports",    "📉  Báo cáo"),
+                    ("reports",     "fa5s.chart-line",     "  Báo cáo"),
                 ]),
                 ("HỆ THỐNG", [
-                    ("accounts",    "♙  Tài khoản"),
-                    ("self.settings",    "⚙  Cài đặt"),
-                    ("hardware",    "⚡  Kết nối TB"),
+                    ("hardware",    "fa5s.microchip",      "  Phần cứng"),
+                    ("hardware",    "fa5s.plug",           "  Kết nối thiết bị"),
+                    ("lanes",       "fa5s.sliders-h",      "  Cấu hình làn"),
+                    ("self.settings",    "fa5s.cog",            "  Cài đặt"),
+                    ("accounts",    "fa5s.users",          "  Người dùng"),
                 ]),
             ]
             required = {"operations": "lane.operate", "sessions": "session.view", "alerts": "alert.view", "shifts": "shift.view", "subscribers": "subscriber.view", "cards": "card.view", "fees": "fee.view", "lanes": "lane.view", "vehicle_types": "fee.view", "accounts": "user.view", "hardware": "device.view", "reports": "report.view"}
+            import qtawesome as qta
             for group, links in groups:
                 if group:
                     g_lbl = label(group, "section")
                     g_lbl.setStyleSheet("color: #475569; font-size: 10px; font-weight: 700; padding: 16px 20px 6px; letter-spacing: 1.5px;")
                     nav_box.addWidget(g_lbl)
-                for key, text in links:
+                for key, icon_code, text in links:
                     if key in required and required[key] not in self.permission_codes: continue
                     button = QPushButton(text); button.setObjectName("nav")
+                    button._icon_code = icon_code
+                    button.setIconSize(QSize(18, 18))
+                    button.setIcon(qta.icon(icon_code, color="#94a3b8"))
                     button.setCursor(Qt.CursorShape.PointingHandCursor)
                     button.clicked.connect(lambda _=False, target=key: self.go(target))
                     nav_box.addWidget(button); self.nav[key] = button
@@ -180,7 +186,13 @@ class MainWindow(QMainWindow, DashboardPageMixin, OperationsPageMixin, SessionPa
             if key not in {"overview", "operations", "hardware", "self.settings"}:
                 self.reload_page(key, navigate=False)
             self.stack.setCurrentWidget(self.pages[key]); self.breadcrumb.setText({"overview":"Tổng quan hệ thống", "operations":"Vận hành làn xe", "sessions":"Phiên gửi xe", "shifts":"Ca làm việc", "subscribers":"Quản lý thuê bao", "cards":"Quản lý thẻ xe", "fees":"Quản lý biểu phí", "lanes":"Cấu hình làn xe", "vehicle_types":"Cấu hình loại xe", "alerts":"Cảnh báo", "accounts":"Tài khoản & phân quyền", "self.settings":"Cài đặt hệ thống", "hardware":"Kết nối & Cài đặt thiết bị thật", "reports": "Báo cáo & Thống kê"}[key])
-            for item_key, button in self.nav.items(): button.setProperty("active", item_key == key); button.style().unpolish(button); button.style().polish(button)
+            import qtawesome as qta
+            for item_key, button in self.nav.items(): 
+                is_active = (item_key == key)
+                button.setProperty("active", is_active)
+                button.style().unpolish(button); button.style().polish(button)
+                if hasattr(button, "_icon_code"):
+                    button.setIcon(qta.icon(button._icon_code, color="#f97316" if is_active else "#94a3b8"))
             if key in {"overview", "operations"}: self.refresh_live()
 
     def reload_page(self, key: str, navigate: bool = True) -> None:

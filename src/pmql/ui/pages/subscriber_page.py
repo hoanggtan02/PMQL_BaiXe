@@ -274,7 +274,8 @@ class SubscriberPageMixin:
         c_box = QHBoxLayout(); c_box.setContentsMargins(0, 0, 0, 0); c_box.setSpacing(10)
         if cards:
             for c in cards:
-                c_code = QLabel(c.card_number if hasattr(c, "card_number") else getattr(c, "code", getattr(c, "id", "")))
+                c_code_val = getattr(c, "rfid_code", getattr(c, "card_number", getattr(c, "code", getattr(c, "id", ""))))
+                c_code = QLabel(str(c_code_val))
                 c_code.setStyleSheet("background: #f1f5f9; color: #334155; font-family: monospace; font-weight: bold; border-radius: 4px; padding: 4px 8px;")
                 c_status = QLabel("Hoạt động" if getattr(c, "status", "") in ("IN_USE", "AVAILABLE") else "Đã khóa")
                 c_status.setStyleSheet("background: #dcfce7; color: #15803d; border-radius: 4px; padding: 2px 6px; font-size: 11px;")
@@ -378,7 +379,11 @@ class SubscriberPageMixin:
             if v_type:
                 idx = t_input.findData(v_type)
                 if idx >= 0: t_input.setCurrentIndex(idx)
-            del_btn = QPushButton("✕"); del_btn.setObjectName("danger"); del_btn.setFixedWidth(30)
+            del_btn = QPushButton()
+            import qtawesome as qta
+            del_btn.setIcon(qta.icon("fa5s.trash-alt", color="white"))
+            del_btn.setObjectName("danger")
+            del_btn.setFixedWidth(32)
             def remove_self():
                 vehicle_list_layout.removeWidget(row_w); row_w.deleteLater(); vehicle_widgets.remove((p_input, t_input))
             del_btn.clicked.connect(remove_self)

@@ -54,8 +54,10 @@ QLineEdit, QComboBox, QDateEdit, QDateTimeEdit { color: #0f172a; background: #f8
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QDateTimeEdit:focus { background: #ffffff; border-bottom: 2px solid #f97316; }
 QLineEdit:read-only { color: #64748b; background: #f1f5f9; }
 QComboBox QAbstractItemView { background: #ffffff; color: #0f172a; selection-background-color: #fff7ed; selection-color: #ea580c; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px; }
-QComboBox::drop-down { border: 0; padding-right: 10px; }
-QDateEdit::drop-down, QDateTimeEdit::drop-down { border: 0; padding-right: 8px; }
+QComboBox::drop-down { border: 0; width: 24px; }
+QComboBox::down-arrow { image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NDc0OGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSI2IDkgMTIgMTUgMTggOSI+PC9wb2x5bGluZT48L3N2Zz4="); width: 16px; height: 16px; }
+QDateEdit::drop-down, QDateTimeEdit::drop-down { border: 0; width: 24px; }
+QDateEdit::down-arrow, QDateTimeEdit::down-arrow { image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM2NDc0OGIiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cG9seWxpbmUgcG9pbnRzPSI2IDkgMTIgMTUgMTggOSI+PC9wb2x5bGluZT48L3N2Zz4="); width: 16px; height: 16px; }
 QFormLayout QLabel { color: #475569; font-size: 12px; font-weight: 600; }
 
 /* ── Buttons ─────────────────────────────────────────────── */
